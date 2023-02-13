@@ -5,6 +5,7 @@ from matplotlib import colors
 import seaborn as sns
 import matplotlib
 from constants import COLOR_dic, SYMBOL_dic, SIZE_dic, ALPHA_dic
+import datetime
 #matplotlib.use("Agg")
 
 
@@ -164,7 +165,6 @@ class Patient():
             ax (matplotlib ax): An axis to plot the timeline.
             y (int): The y (vertical value) to plot the timeline on the axis.
         """
-        import datetime
         
         #A dict with the keys being the features of FUPDISCONT page
         #and the values being their long name
@@ -199,6 +199,14 @@ class Patient():
         ax.text(np.min(dates)-datetime.timedelta(days=150), y, s=str(self.uniqid), fontsize="small")
 
     def plot_all_data(self, path, instruction_dir, patient_dataset):
+        """Plot each patient's FUP and Baseline data on one page using a psudo-heatmap figure.
+        Note: it is recommended to set matplotlib.use("Agg") when using this function to prevent memory leakage.
+
+        Args:
+            path (String): Path to where the pics generated should be saved.
+            instruction_dir (String): Path to the instructions.csv file.
+            patient_dataset (Dataset): The custom Dataset object.
+        """
         
         def plot_baseline_on_two_axes(baseline_data, ax1, ax2):
             """Draw the 'heatmap' of the baseline data on two axis.
@@ -391,7 +399,12 @@ class Patient():
             string +=f"\t{str(i_+1)}. {ele_a}\t{ele_b}\n"
         return string
     
-    def get_FUP_array(self):    
+    def get_FUP_array(self):
+        """Returns a dataframe with both FUPPREDICTOR and FUPOUTCOME data concatenated together.
+
+        Returns:
+            pandas Dataframe: Pandas dataframe with both FUPPREDICTOR and FUPOUTCOME data.
+        """
         FUP_Pred = self.FUPPREDICTOR.set_index("fudt").drop("uniqid", axis=1)
         FUP_Outc = self.FUPOUTCOME.set_index("fuodt").drop("uniqid", axis=1)
         
@@ -402,7 +415,8 @@ class Patient():
         return concated_df        
 
     def remove_FUP_after_bleeding_disc(self):
-        #Remove all the FUP data that occur after discontinuration or bleeding
+        """Remove all the FUP data that occur after discontinuation or bleeding.
+        """
         color_dic = COLOR_dic.copy()
         color_dic = {value:key for key, value in color_dic.items()}
         all_dates, all_colors, _, _, _ = self.get_timeline_for_plotting()
@@ -415,13 +429,13 @@ class Patient():
 
         
         #If the bleeding date list isn't empty, 
-        # we restrict the FUPOUTCOME and FUPPREDICTOR that come after bleeding.
+        # we remove the FUPOUTCOME and FUPPREDICTOR that come after bleeding.
         if bleeding_date:
             self.FUPPREDICTOR = self.FUPPREDICTOR[self.FUPPREDICTOR['fudt'] < bleeding_date[0]]
             self.FUPOUTCOME = self.FUPOUTCOME[self.FUPOUTCOME['fuodt'] < bleeding_date[0]]
             
         #If the discontinuation date list isn't empty, 
-        # we restrict the FUPOUTCOME and FUPPREDICTOR that come after discontinuation.
+        # we remove the FUPOUTCOME and FUPPREDICTOR that come after discontinuation.
         if discont_date:
             self.FUPPREDICTOR = self.FUPPREDICTOR[self.FUPPREDICTOR['fudt'] < discont_date[0]]
             self.FUPOUTCOME = self.FUPOUTCOME[self.FUPOUTCOME['fuodt'] < discont_date[0]]
@@ -441,6 +455,8 @@ class Patient():
             return 0
 
     def fill_missing_fups(self):
+        """Artificially fill the FUPPREDICTOR and FUPOUTCOME with a naive logic.
+        """
         
         def fill_FUPOUTCOME(patient):
             new_FUPOUTCOME = dict() #Empty dic
