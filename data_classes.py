@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from matplotlib import colors
 import seaborn as sns
 import matplotlib
+from constants import COLOR_dic, SYMBOL_dic, SIZE_dic, ALPHA_dic
 #matplotlib.use("Agg")
 
 
@@ -44,50 +45,6 @@ class Patient():
         else:
             return sorted(list(self.FUPOUTCOME["fuodt"]))
         
-    def get_timeline_graphing_constants(self):
-        """Returns the constant colors, symbols, sizes, and alphas used to plot the timeline.
-
-        Returns:
-            dics, dics, dics, dics: 4 dicts of color_dic, symbol_dic, size_dic, alpha_dic
-        """
-        color_dic = {
-            "majbldconf":"red",
-            "relbldconf":"orange",
-            "nobld":"khaki",
-            "fups":"grey",
-            "fups_disc":"black",
-            "baseline":"green"
-        }
-
-        symbol_dic = {
-            "majbldconf":"\u2715",
-            "relbldconf":"\u2715",
-            "nobld":"\u2715",
-            "fups":"⦁",
-            "fups_disc":"\u2620",
-            "baseline":"⦁"
-        }
-        
-        size_dic = {
-            "majbldconf":80,
-            "relbldconf":80,
-            "nobld":80,
-            "fups":50,
-            "fups_disc":80,
-            "baseline":50
-        }
-        
-        alpha_dic = {
-            "majbldconf":0.9,
-            "relbldconf":0.9,
-            "nobld":0.9,
-            "fups":0.6,
-            "fups_disc":0.9,
-            "baseline":0.6
-        }
-        
-        return color_dic, symbol_dic, size_dic, alpha_dic
-    
     def extract_timeline_data_for_CRF(self, attrib_name, data, all_dates, all_colors, all_symbols, all_sizes, all_alphas):
         """Extract the dates on a given CRF, and returns it with appropriate colors, symbols, sizes, and alphas.
 
@@ -103,7 +60,6 @@ class Patient():
         Returns:
             list, list, list, list, list: Five lists of dates, colors, symbols, sizes, alphas.
         """
-        color_dic, symbol_dic, size_dic, alpha_dic = self.get_timeline_graphing_constants()
 
         if (attrib_name == "AD1"):
             if data is None:
@@ -112,20 +68,20 @@ class Patient():
                 for item in data:
                     all_dates.append(item["blddtadj"])
                     if item["majbldconf"] == 1:
-                        all_colors.append(color_dic["majbldconf"])
-                        all_symbols.append(symbol_dic["majbldconf"])
-                        all_sizes.append(size_dic["majbldconf"])
-                        all_alphas.append(alpha_dic["majbldconf"])
+                        all_colors.append(COLOR_dic["majbldconf"])
+                        all_symbols.append(SYMBOL_dic["majbldconf"])
+                        all_sizes.append(SIZE_dic["majbldconf"])
+                        all_alphas.append(ALPHA_dic["majbldconf"])
                     elif item["relbldconf"] == 1:
-                        all_colors.append(color_dic["relbldconf"])
-                        all_symbols.append(symbol_dic["relbldconf"])
-                        all_sizes.append(size_dic["relbldconf"])
-                        all_alphas.append(alpha_dic["relbldconf"])
+                        all_colors.append(COLOR_dic["relbldconf"])
+                        all_symbols.append(SYMBOL_dic["relbldconf"])
+                        all_sizes.append(SIZE_dic["relbldconf"])
+                        all_alphas.append(ALPHA_dic["relbldconf"])
                     elif item["nobld"] == 1:
-                        all_colors.append(color_dic["nobld"])
-                        all_symbols.append(symbol_dic["nobld"])      
-                        all_sizes.append(size_dic["nobld"])
-                        all_alphas.append(alpha_dic["nobld"])
+                        all_colors.append(COLOR_dic["nobld"])
+                        all_symbols.append(SYMBOL_dic["nobld"])      
+                        all_sizes.append(SIZE_dic["nobld"])
+                        all_alphas.append(ALPHA_dic["nobld"])
 
             return all_dates, all_colors, all_symbols, all_sizes, all_alphas
 
@@ -135,11 +91,11 @@ class Patient():
                 return all_dates, all_colors, all_symbols, all_sizes, all_alphas
             else:
                 all_dates = all_dates + sorted(list((data["fudt"])))
-                all_colors = all_colors + [color_dic["fups"]]*len(sorted(list((data["fudt"]))))
-                all_symbols = all_symbols + [symbol_dic["fups"]]*len(sorted(list((data["fudt"]))))
-                all_sizes = all_sizes + [size_dic["fups"]]*len(sorted(list((data["fudt"]))))
+                all_colors = all_colors + [COLOR_dic["fups"]]*len(sorted(list((data["fudt"]))))
+                all_symbols = all_symbols + [SYMBOL_dic["fups"]]*len(sorted(list((data["fudt"]))))
+                all_sizes = all_sizes + [SIZE_dic["fups"]]*len(sorted(list((data["fudt"]))))
 
-                all_alphas = all_alphas + [alpha_dic["fups"]]*len(sorted(list((data["fudt"]))))
+                all_alphas = all_alphas + [ALPHA_dic["fups"]]*len(sorted(list((data["fudt"]))))
 
 
 
@@ -154,10 +110,10 @@ class Patient():
                 b = data.select_dtypes(include=[np.datetime64]).dropna(axis=1).values
                 if b.shape[1] != 0:
                     all_dates = all_dates+[np.min(b)]
-                    all_colors = all_colors+[color_dic["fups_disc"]]
-                    all_symbols = all_symbols+[symbol_dic["fups_disc"]]
-                    all_sizes = all_sizes+[size_dic["fups_disc"]]
-                    all_alphas = all_alphas+[alpha_dic["fups_disc"]]
+                    all_colors = all_colors+[COLOR_dic["fups_disc"]]
+                    all_symbols = all_symbols+[SYMBOL_dic["fups_disc"]]
+                    all_sizes = all_sizes+[SIZE_dic["fups_disc"]]
+                    all_alphas = all_alphas+[ALPHA_dic["fups_disc"]]
 
 
 
@@ -170,10 +126,10 @@ class Patient():
                 return all_dates, all_colors, all_symbols, all_sizes, all_alphas
             else:
                 all_dates = all_dates+[pd.Timestamp(data["dtbas"].values[0])]
-                all_colors = all_colors+[color_dic["baseline"]]
-                all_symbols = all_symbols+[symbol_dic["baseline"]]
-                all_sizes = all_sizes+[size_dic["baseline"]]
-                all_alphas = all_alphas+[alpha_dic["baseline"]]
+                all_colors = all_colors+[COLOR_dic["baseline"]]
+                all_symbols = all_symbols+[SYMBOL_dic["baseline"]]
+                all_sizes = all_sizes+[SIZE_dic["baseline"]]
+                all_alphas = all_alphas+[ALPHA_dic["baseline"]]
 
 
 
@@ -447,7 +403,7 @@ class Patient():
 
     def remove_FUP_after_bleeding_disc(self):
         #Remove all the FUP data that occur after discontinuration or bleeding
-        color_dic, _, _, _ = self.get_timeline_graphing_constants()
+        color_dic = COLOR_dic.copy()
         color_dic = {value:key for key, value in color_dic.items()}
         all_dates, all_colors, _, _, _ = self.get_timeline_for_plotting()
 
@@ -756,7 +712,7 @@ class Dataset():
             if len(colors) == 0:
                 non_bleeders.append(patient)
             else:
-                if "red" in colors:
+                if COLOR_dic["majbldconf"] in colors:
                     bleeders.append(patient)
                 else:
                     non_bleeders.append(patient)
@@ -768,7 +724,8 @@ class Dataset():
         Args:
             ax (matplotlib ax): matplotlib axis object
         """
-        color_dic, symbol_dic, size_dic, alpha_dic = self.all_patients[0].get_timeline_graphing_constants()
+        color_dic = COLOR_dic.copy()
+        symbol_dic = SYMBOL_dic.copy()
         patches = []
 
         label_name_dics = {'majbldconf': 'Major bleeding confirmed',
