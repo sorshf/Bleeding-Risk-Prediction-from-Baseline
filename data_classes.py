@@ -6,6 +6,7 @@ import seaborn as sns
 import matplotlib
 from constants import COLOR_dic, SYMBOL_dic, SIZE_dic, ALPHA_dic
 import datetime
+import time
 #matplotlib.use("Agg")
 
 
@@ -774,34 +775,11 @@ class Dataset():
                            
     def plot_timeline_multiple_pages(self, path, num_pages=13):
         """Plot the timelines for all the patients across multiple PDF pages
+        
+        Args:
+            path (string): The path to where the pics should be saved.
+            num_pages (int): The number of pdf pages that should be produced.
         """
-        import time
-        
-        # def add_custom_legend(ax):
-        #     """Add a custom legend (for the bleeding timeline) to a matplotlib axis.
-
-        #     Args:
-        #         ax (matplotlib ax): matplotlib axis object
-        #     """
-        #     color_dic, symbol_dic, size_dic, alpha_dic = self.all_patients[0].get_timeline_graphing_constants()
-        #     patches = []
-
-        #     label_name_dics = {'majbldconf': 'Major bleeding confirmed',
-        #                          'relbldconf': 'Clinically relevant non-major bleeding',
-        #                          'nobld': 'No bleeding',
-        #                          'baseline': 'Baseline visit',
-        #                          'fups': 'Follow-ups',
-        #                          'fups_disc': 'Follow-up discontinuation'
-        #                          }
-
-        #     for name in label_name_dics:
-        #         a = ax.scatter([],[], marker=f"${symbol_dic[name]}$", s=100, color=color_dic[name], label=label_name_dics[name])
-        #         patches.append(a)
-
-        #     ax.legend(handles=patches, #bbox_to_anchor=(0, 1), 
-        #                loc='best', ncol=1, fontsize=14,markerscale=2 )
-
-        
         
         def save_a_fig(patients_set, set_number):
             fig, ax = plt.subplots(figsize=(15,35))
@@ -833,9 +811,24 @@ class Dataset():
         for set_number, patients_set in enumerate(np.array_split(list(reversed(self.all_patients)), num_pages)):
             save_a_fig(patients_set, set_number)
                
-    def create_FUP_stats(self, mode="save"):
+    def create_FUPPREDICTOR_stats(self, path, mode="save"):
+        """Create a summary table on number of times a given patient has one in a FUPPREDICTOR feature.
+
+        Args:
+            mode (str, optional): 1-"save": will write to a csv 2-"return": will return a pandas df. Defaults to "save".
+
+        Returns:
+            pandas.df: The table of the stats.
+        """
+        
+        #Making sure the path has the forward slash
+        if path[-1] != "/":
+            path = path + "/"
+        
+        #Get the fups data
         FUPS_dict, FUP_features,  _, _, _ = self.get_data_x_y()
 
+        #Divide the patients into bleeders and non-bleeders.
         bleeders = []
         non_bleeders = []
 
@@ -848,6 +841,7 @@ class Dataset():
         bleeders_dic_FUPS = dict()
         non_bleeders_dic_FUPS = dict()
 
+        #For each feature in FUPPREDICTOR, count number of patients where a given feature is one.
         for feature in bleeders[0].FUPPREDICTOR.columns:
             if pd.api.types.is_integer_dtype(patient.FUPPREDICTOR[feature]):
                 bleeders_dic_FUPS[feature] = 0
@@ -874,7 +868,7 @@ class Dataset():
         counts_all["percent_nonzero_overall"] = [(len(a[a[col]>0])/len(a))*100 if col in a.columns else pd.NA for col in list(counts_all.index)]
 
         if mode == "save":
-            counts_all.to_csv("FUPS_stat.csv")
+            counts_all.to_csv(f"{path}FUPS_stat.csv")
         elif mode == "return":
             return counts_all
             
@@ -913,38 +907,28 @@ class Dataset():
                 patient.FUPPREDICTOR["years-since-baseline-visit"] = patient.FUPPREDICTOR.apply(lambda x: round(pd.Timedelta(x["fudt"] - baseline_date).days/365., 2), axis=1)
               
     def get_data_x_y(self):
-        FUPS_dict = dict()
-        baseline_list = []
-        target_list = []
+        """Returns the baseline, FUP data, and target of a Dataset object.
 
-        #Get the maximum length of the arrays
-        # FUP_lengths = []
-        # for patient in self.all_patients:
-        #     FUP_lengths.append(len(patient.get_FUP_array()))
-            
-        # max_length = max(FUP_lengths)
+        Returns:
+            dict, list, list, list, list : FUPS_dic, FUP_columns, Baseline_list, Baseline_columns, target_lists
+        """
+        
+        FUPS_dict = dict() #A dictionary with keys:values corresponding to uniqid:FUP_numpy_arrays
+        baseline_list = [] #List of all of the baseline values as numpy array
+        target_list = [] #List of baseline datasets
 
-        # length_zero_counter = 0
+
         for patient in self.all_patients:
-            baseline = patient.BASELINE.to_numpy(dtype="float32").flatten()#.drop(['uniqid', 'dtbas'], axis=1).to_numpy(dtype="float32")
-            fups = patient.get_FUP_array().to_numpy(dtype="float32")#.drop(columns="uniqid", axis=1).to_numpy(dtype="float32")
-            # if len(fups) != max_length:
-            #     fups = np.vstack((fups, [np.array([ignore_digit]*fups.shape[1]) for _ in range(max_length-len(fups))]))
-        #     if len(fups) == 0:
-        #         fups = np.zeros(shape=(1,fups.shape[1]), dtype="float32")
-        #         length_zero_counter += 1
-            target = patient.get_target()
+            baseline = patient.BASELINE.to_numpy(dtype="float32").flatten() #Baseline data
+            fups = patient.get_FUP_array().to_numpy(dtype="float32") #FUP data
+            target = patient.get_target() #Target data
             
+            #Append the baseline, FUP, and target to the appropriate variable for each patient.
             FUPS_dict[patient.uniqid]=fups
             baseline_list.append(baseline)
             target_list.append(target)
             
-        # FUPS_array = np.array(FUPS_list)
-        # Baseline_array = np.array(baseline_list)
-        # target_array = np.array(target_list)
-        
-        # print("Number of patients with length zero of FUPs:", length_zero_counter)
-        return FUPS_dict, patient.get_FUP_array().columns,  baseline_list, patient.BASELINE.columns, target_list
+        return FUPS_dict, list(patient.get_FUP_array().columns),  baseline_list, list(patient.BASELINE.columns), target_list
     
     def correct_FUPPREDICTION_with_new_columns(self):
         def correct_FUPPREDICTION_New_Columns(patient_object, FUP_feature_name, BASELINE_feature_name):
