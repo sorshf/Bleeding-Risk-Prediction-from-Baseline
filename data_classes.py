@@ -646,9 +646,21 @@ class Dataset():
                 
         return patient_list
     
-    def filter_patients_sequentially(self):
+    def filter_patients_sequentially(self, mode):
+        """Removes the patients without baseline. Then depending on the mode, it either:
+        1- removes those w/o FUP and those whose FUP are after bleeding/discontinuation.
+        2- fill one FUP vector for patients w/o FUP and those whose FUP are after bleeding/discontinuation.
+
+        Args:
+            mode (String): The modes: 1- "remove_patients_W/O_FUP_or_Baseline_NO_filling"
+                                      2- "fill_patients_without_FUP"
+
+        Raises:
+            Exception: If the mode isn't defined, an exception is raised.
+        """
         
-        #Remove those without baseline
+        #Remove tho patients without baseline
+        #This occurs for any modes.
         patients_without_baseline = []
         new_patients_list = []
         for patient in self:
@@ -660,61 +672,64 @@ class Dataset():
         print(f"{len(patients_without_baseline)}/{len(self.all_patients)} of patients were removed because they don't have BASELINE data.")
         self.all_patients = new_patients_list
         
-        
-        # #Add FUP to the patients without FUP data
-        # patients_without_FUP = 0
-        # for patient in self:
-        #     if (patient.FUPPREDICTOR is None):
-        #         patient.fill_missing_fups()
-        #         patients_without_FUP +=1 
+        if mode == "remove_patients_W/O_FUP_or_Baseline_NO_filling":
+            #Remove those without FUP data
+            patients_without_FUP = []
+            new_patients_list = []
+            for patient in self:
+                if (patient.FUPPREDICTOR is None):
+                    patients_without_FUP.append(patient)
+                else:
+                    new_patients_list.append(patient)
+            
+            print(f"{len(patients_without_FUP)}/{len(self.all_patients)} of patients were removed because they don't have FUP data.")
+            self.all_patients = new_patients_list
+            
+            
+            #Remove the events after each bleeding or discontinuation
+            #Afterwards, if the patient's FUP were none, remove them from the dataset.
+            patients_with_no_events_before_bleeding = []
+            new_patients_list = []
+            for patient in self:
+                patient.remove_FUP_after_bleeding_disc()
+                if len(patient.get_FUP_array()) == 0:
+                    patients_with_no_events_before_bleeding.append(patient)
+                else:
+                    new_patients_list.append(patient)
+            
+            print(f"{len(patients_with_no_events_before_bleeding)}/{len(self.all_patients)} of patients were removed because they don't have any event before bleeding/discontinuation.")
+            self.all_patients = new_patients_list
+            
+            
+            # return {
+            #     "patients_without_baseline": patients_without_baseline,
+            #     "patients_without_FUP":patients_without_FUP,
+            #     "patients_with_no_events_before_bleeding":patients_with_no_events_before_bleeding
+            # }
+        elif mode == "fill_patients_without_FUP":
+            #Add FUP to the patients without FUP data
+            patients_without_FUP = 0
+            for patient in self:
+                if (patient.FUPPREDICTOR is None):
+                    patient.fill_missing_fups()
+                    patients_without_FUP +=1 
 
-        # print(f"{patients_without_FUP}/{len(self.all_patients)} of patients don't have FUP data. They were added with code.")
-        
-                
-        # #Remove the events after each bleeding or discontinuation
-        # patients_with_no_events_before_bleeding = 0
-        # for patient in self:
-        #     patient.remove_FUP_after_bleeding_disc()
-        #     if len(patient.get_FUP_array()) == 0:
-        #         patient.fill_missing_fups()
-        #         patients_with_no_events_before_bleeding += 1
-
-        
-        # print(f"{patients_with_no_events_before_bleeding}/{len(self.all_patients)} of patients don't have any event before bleeding/discontinuation. Added with code.")
-
+            print(f"{patients_without_FUP}/{len(self.all_patients)} of patients don't have FUP data. They were added with code.")
+            
+                    
+            #Remove the events after each bleeding or discontinuation
+            patients_with_no_events_before_bleeding = 0
+            for patient in self:
+                patient.remove_FUP_after_bleeding_disc()
+                if len(patient.get_FUP_array()) == 0:
+                    patient.fill_missing_fups()
+                    patients_with_no_events_before_bleeding += 1
+            
+            print(f"Added one FUP vector with code to {patients_with_no_events_before_bleeding}/{len(self.all_patients)} of patients who don't have any event before bleeding/discontinuation.")
+        else:
+            raise Exception(f"The mode {mode} isn't defined in filter_patients_sequentially() function.")
                         
-        #Remove those without FUP data
-        patients_without_FUP = []
-        new_patients_list = []
-        for patient in self:
-            if (patient.FUPPREDICTOR is None):
-                patients_without_FUP.append(patient)
-            else:
-                new_patients_list.append(patient)
-        
-        print(f"{len(patients_without_FUP)}/{len(self.all_patients)} of patients were removed because they don't have FUP data.")
-        self.all_patients = new_patients_list
-        
-        
-        #Remove the events after each bleeding or discontinuation
-        patients_with_no_events_before_bleeding = []
-        new_patients_list = []
-        for patient in self:
-            patient.remove_FUP_after_bleeding_disc()
-            if len(patient.get_FUP_array()) == 0:
-                patients_with_no_events_before_bleeding.append(patient)
-            else:
-                new_patients_list.append(patient)
-        
-        print(f"{len(patients_with_no_events_before_bleeding)}/{len(self.all_patients)} of patients were removed because they don't have any event before bleeding/discontinuation.")
-        self.all_patients = new_patients_list
-        
-        
-        # return {
-        #     "patients_without_baseline": patients_without_baseline,
-        #     "patients_without_FUP":patients_without_FUP,
-        #     "patients_with_no_events_before_bleeding":patients_with_no_events_before_bleeding
-        # }
+
      
     def sort_patients(self):
         """Sort patients in the dataset such that the patients with major bleeding are at the begining of the list.
