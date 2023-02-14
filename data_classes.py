@@ -729,8 +729,6 @@ class Dataset():
         else:
             raise Exception(f"The mode {mode} isn't defined in filter_patients_sequentially() function.")
                         
-
-     
     def sort_patients(self):
         """Sort patients in the dataset such that the patients with major bleeding are at the begining of the list.
         """
@@ -747,7 +745,7 @@ class Dataset():
                     bleeders.append(patient)
                 else:
                     non_bleeders.append(patient)
-        self.all_patients = [*non_bleeders,*bleeders]
+        self.all_patients = [*bleeders, *non_bleeders]
                 
     def add_custom_legend(self, ax):
         """Add a custom legend (for the bleeding timeline) to a matplotlib axis.
