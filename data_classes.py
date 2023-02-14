@@ -931,6 +931,8 @@ class Dataset():
         return FUPS_dict, list(patient.get_FUP_array().columns),  baseline_list, list(patient.BASELINE.columns), target_list
     
     def correct_FUPPREDICTION_with_new_columns(self):
+        """For each patient, create 3 new columns in FUPS (diabmelfu, hypertfu, and atrfibfu) as PWELLS explained. 
+        """
         def correct_FUPPREDICTION_New_Columns(patient_object, FUP_feature_name, BASELINE_feature_name):
             #If patients had Diabetes at baseline they always have it so the follow up stuff doesn’t matter. 
             # For the patients with No DM at baseline they can be considered to have developed diabetes when the “new” is a one
