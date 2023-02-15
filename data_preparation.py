@@ -3,10 +3,12 @@ import numpy as np
 from data_classes import Dataset
 
 def get_type_dic(df_instructions):
-    """
-    Function that gets a pandas dataframe (with columns "Abbreviations" and "Type")
-    returns a dictionary with keys being abbreviations name and values being appropriate
-    Python type.
+    """Gets a pandas dataframe (with columns "Abbreviations" and "Type")
+        returns a dictionary with keys being abbreviations name and values being appropriate
+        Python type.
+
+    Returns:
+        dict: A dictionary with the abbreviation:python_type structure.
     """
     
     type_dic = dict()
@@ -24,12 +26,13 @@ def get_type_dic(df_instructions):
             
     return type_dic
 
-def fill_na_in_df(df_instructions, CRF_name, df_data ):
-    """
-    Function that gets instruction pandas dataframe (must contain columns "Abbreviations", "Type", 
-    "Fill-na", "Need-1", "CRF_name"), the name of the CRF, and the dataset.
-    Returns the dataset with the NAs filled according to the instructions
+def fill_na_in_df(df_instructions, CRF_name, df_data):
+    """Function that gets instruction pandas dataframe (must contain columns "Abbreviations", "Type", 
+        "Fill-na", "Need-1", "CRF_name"), the name of the CRF, and the dataset.
+        Returns the dataset with the NAs filled according to the instructions.
     
+    Returns:
+        pandas.df: The pandas dataframe of df_data with NAs filled.
     """
     
     #Fill NaNs in the columns that are 'Mode', 'Zero', or 'Median'
@@ -58,6 +61,14 @@ def fill_na_in_df(df_instructions, CRF_name, df_data ):
     return df_data
 
 def get_encoding_dic(encoding):
+    """Converts the encoding string in the instructions excel file into a dic of int:string.
+
+    Args:
+        encoding (string): Encoding string in the instructions excel.
+
+    Returns:
+        dic: Dict of int:string generated from encoding dict.
+    """
     #Keys are the numbers (0,1,2,..) and values are corresponding values (No, Yes Unknown, ...)
     encoding_dic = dict()
     for ele in encoding.split(','):
@@ -67,6 +78,15 @@ def get_encoding_dic(encoding):
     return encoding_dic
 
 def one_hot_encode(df_instructions, df_data):
+    """One-hot encode a dataframe as instructed in the instructions excel.
+
+    Args:
+        df_instructions (pandas.df): The instructions excel as dataframe.
+        df_data (pandas.df): The data as dataframe.
+
+    Returns:
+        pandas.df: Data with the one-hot encoded features.
+    """
     #Encode the columns that will be One-Hot encoded
     cols_one_hot_name = df_instructions[df_instructions["Preprocessing"]=="One-hot"]["Abbreviation"]
 
@@ -91,7 +111,16 @@ def one_hot_encode(df_instructions, df_data):
     return df_data
 
 def get_abb_to_long_dic(instructions_dir, CRF_name):
-    # #Read the excel file for instructions to be performed on the columns of Baseline
+    """Create a dictionary of abbreviation:LongName from the instructions excel.
+
+    Args:
+        instructions_dir (string): Path to instruction dir excel.
+        CRF_name (string): Name of the CRF we want the abb_to_long for.
+
+    Returns:
+        dict: abbreviation:LongName dictionary.
+    """
+    #Read the excel file for instructions
     instructions = pd.read_excel(instructions_dir)
     
     instructions = instructions[(instructions["CRF_name"]==CRF_name)]
@@ -105,7 +134,71 @@ def get_abb_to_long_dic(instructions_dir, CRF_name):
 
     return abb_to_longName_dic
 
-def correct_FUPOUTOME_discrepencies(data_dir, discrepency_dir):
+def remove_incorrect_values(dataframe, instructions, verbose=True):
+    """Replace the wrong values with None as instructed in the instructions encoding.
+
+    Args:
+        dataframe (pandas.df): The data that is not yet one-hot encoded.
+        instructions (pandas.df): The instructions excel file.
+        verbose (boolean): Whether print the wrong values.
+
+    Returns:
+        pandas.df: The dataframe with the weird/wrong values converted to None.
+    """
+    #There are weird/wrong values in some columns of the the dataset. 
+    #We use the encoding to only keep the relevant values, then make the rest of the values NA
+    for col_name in dataframe.columns:
+        if col_name in list(instructions["Abbreviation"]):
+            encoding = str(instructions[instructions["Abbreviation"]==col_name]["Encoding"].values)
+            if encoding != "['None']":
+                encoding_dic = get_encoding_dic(encoding)
+                valid_numbers = encoding_dic.keys()
+                values_in_df = list(dataframe[col_name].unique())
+                for value in values_in_df:
+                    if (str(value) not in valid_numbers) & (~pd.isna(value)):
+                        if verbose:
+                            print(f"The value {value} should not be in column {col_name} in {list(instructions['CRF_name'].unique())[0]}. So it is replaced with NA.")
+                        dataframe[col_name] = dataframe[col_name].replace(value, None)
+    return dataframe
+
+def prepare_FUPOUTCOME(data_dir, instruction_dir, discrepency_dir):
+    """Read the FUPOUTCOME raw dataset, correct discrepencies, replace wrong values with None, 
+    and then fill NAs as instructed in the instructions csv file.
+
+    Args:
+        data_dir (string): Path to the raw data excel file.
+        instruction_dir (string): Path to the instructions excel file.
+        discrepency_dir (string): Path to the discrepency excel file.
+
+    Returns:
+        pandas.df: FUPOUTCOME dataframe.
+    """
+    #Read the instruction csv of which features to use and how to process them
+    instructions = pd.read_excel(instruction_dir)
+    instructions = instructions[(instructions["CRF_name"]=="FUPOUTCOME")&(instructions["Need-1"]=="Yes")]
+
+    #Create the dictionary of the types for each feature in the instructions csv file
+    type_dic = get_type_dic(instructions)
+    
+    #Read the data, and then fix the discrepencies
+    df_FUPOUTCOME = correct_FUPOUTCOME_discrepencies(data_dir, discrepency_dir)
+
+    #Change the datatype of the columns according to the instructions
+    df_FUPOUTCOME = df_FUPOUTCOME.astype(type_dic)
+    
+    #Only keep the values that we determined in the instructions
+    df_FUPOUTCOME = df_FUPOUTCOME[type_dic.keys()]
+      
+    #There are weird/wrong values in some columns of the the dataset. 
+    #We use the encoding to only keep the relevant values, then make the rest of the values NA
+    df_FUPOUTCOME = remove_incorrect_values(df_FUPOUTCOME, instructions)
+
+    #Fill_NAs
+    df_FUPOUTCOME = fill_na_in_df(instructions, CRF_name="FUPOUTCOME", df_data=df_FUPOUTCOME)
+    
+    return df_FUPOUTCOME
+
+def correct_FUPOUTCOME_discrepencies(data_dir, discrepency_dir):
     """Generates the dataframe for FUPOUTCOME with the data discrepencies fixed.
 
     Args:
@@ -131,7 +224,7 @@ def correct_FUPOUTOME_discrepencies(data_dir, discrepency_dir):
     #The portion of discrepency correction sheet for FUPOUTCOME
     FUPS_to_correct_FUPOUTCOME = discrepency_data_correct_FUPS[discrepency_data_correct_FUPS["form"]=="FUPOUTCOME"]
     #Use the discrepency correction sheet, to remove unwanted entries, or change their dates accordingly
-    for i, row in FUPS_to_correct_FUPOUTCOME.iterrows():
+    for _, row in FUPS_to_correct_FUPOUTCOME.iterrows():
         if row["process"] == "remove":
             df_OUTCOME.drop(df_OUTCOME[(df_OUTCOME["fuodt"]==row["date"])&(df_OUTCOME["uniqid"]==row["uniqid"])].index, axis=0, inplace=True)
         else:
@@ -151,50 +244,64 @@ def correct_FUPOUTOME_discrepencies(data_dir, discrepency_dir):
     
     return df_OUTCOME
 
-#FUPOUTCOME
-def prepare_FUPOUTCOME(data_dir, instruction_dir, discrepency_dir):
-    #Read the instruction csv of which features to use and how to process them
+def prepare_FUPPREDICTOR(data_dir, instruction_dir, discrepency_dir):
+    """Read the FUPPREDICTOR raw dataset, correct discrepencies, fix follow-up weights,
+    replace wrong values with None, fill NAs as instructed in the instructions csv file,
+    and then one-hot encode the variables as instructed.
+
+    Args:
+        data_dir (string): Path to the raw data excel file.
+        instruction_dir (string): Path to the instructions excel file.
+        discrepency_dir (string): Path to the discrepency excel file.
+
+    Returns:
+        pandas.df: FUPPREDICTOR dataframe.
+    """
+    #Read the instruction Excel of which features to use and how to process them
     instructions = pd.read_excel(instruction_dir)
-    instructions = instructions[(instructions["CRF_name"]=="FUPOUTCOME")&(instructions["Need-1"]=="Yes")]
+    instructions = instructions[(instructions["CRF_name"]=="FUPPREDICTOR")&(instructions["Need-1"]=="Yes")]
 
     #Create the dictionary of the types for each feature in the instructions csv file
     type_dic = get_type_dic(instructions)
-    
+
     #Read the data, and then fix the discrepencies
-    df_FUPOUTCOME = correct_FUPOUTOME_discrepencies(data_dir, discrepency_dir)
+    df_FUPPREDICTOR = correct_FUPPREDICTOR_discrepencies(data_dir, discrepency_dir)
 
     #Change the datatype of the columns according to the instructions
-    df_FUPOUTCOME = df_FUPOUTCOME.astype(type_dic)
+    df_FUPPREDICTOR = df_FUPPREDICTOR.astype(type_dic)
     
     #Only keep the values that we determined in the instructions
-    df_FUPOUTCOME = df_FUPOUTCOME[type_dic.keys()]
-      
+    df_FUPPREDICTOR = df_FUPPREDICTOR[type_dic.keys()]
+
     #There are weird/wrong values in some columns of the the dataset. 
     #We use the encoding to only keep the relevant values, then make the rest of the values NA
-    df_FUPOUTCOME = remove_incorrect_values(df_FUPOUTCOME, instructions)
+    df_FUPPREDICTOR = remove_incorrect_values(df_FUPPREDICTOR, instructions)
 
-    #Fill_NAs
-    df_FUPOUTCOME = fill_na_in_df(instructions, CRF_name="FUPOUTCOME", df_data=df_FUPOUTCOME)
+    #Taking care of the NAs in the wtfukg (weights) in FUPPREDICTOR
+    df_BASELINE_weights = pd.read_excel(data_dir, header=0, usecols=["wtbaskg", "uniqid"], sheet_name = "BASELINE",  engine="openpyxl")
+
+    #For the follow-up weights, if it is missing, use the mean of the other follow-up weights
+    #However, if all follow-up weights are missing, use the weights recorded in Baseline
+    #If both follow-up weights and baseline weights are missing, use 75.0 as the weights in kg
+    for ind in df_FUPPREDICTOR[df_FUPPREDICTOR["wtfukg"].isna()].index:
+        patient_id = df_FUPPREDICTOR.loc[ind,"uniqid"] #Get the patient ID
+        baseline_weight = df_BASELINE_weights[df_BASELINE_weights["uniqid"]==patient_id]["wtbaskg"].values[0]
+        mean = np.mean([i for i in df_FUPPREDICTOR[df_FUPPREDICTOR["uniqid"]==patient_id]["wtfukg"] if ~pd.isna(i)])
+
+        if pd.isna(mean) & ~pd.isna(baseline_weight):
+            df_FUPPREDICTOR.loc[ind, "wtfukg"] = baseline_weight
+        elif pd.isna(mean) & pd.isna(baseline_weight):
+            df_FUPPREDICTOR.loc[ind, "wtfukg"] = 75.0
+        else:
+            df_FUPPREDICTOR.loc[ind, "wtfukg"] = mean
+
+    #Fill the NAs in the dataset according to the instructions excel file
+    df_FUPPREDICTOR = fill_na_in_df(instructions, CRF_name="FUPPREDICTOR", df_data=df_FUPPREDICTOR)
     
-    return df_FUPOUTCOME
-
-#FUPPREDICTOR
-def remove_incorrect_values(dataframe, instructions):
-    #There are weird/wrong values in some columns of the the dataset. 
-    #We use the encoding to only keep the relevant values, then make the rest of the values NA
-    for col_name in dataframe.columns:
-        if col_name in list(instructions["Abbreviation"]):
-            encoding = str(instructions[instructions["Abbreviation"]==col_name]["Encoding"].values)
-            if encoding != "['None']":
-                encoding_dic = get_encoding_dic(encoding)
-                valid_numbers = encoding_dic.keys()
-                values_in_df = list(dataframe[col_name].unique())
-                for value in values_in_df:
-                    if (str(value) not in valid_numbers) & (~pd.isna(value)):
-                        print(f"The value {value} should not be in column {col_name} in {list(instructions['CRF_name'].unique())[0]}. So it is replaced with NA.")
-                        dataframe[col_name] = dataframe[col_name].replace(value, None)
-    return dataframe
-
+    #One-hot encode the columns that need to be one-hot encoded
+    df_FUPPREDICTOR = one_hot_encode(instructions, df_FUPPREDICTOR)
+        
+    return df_FUPPREDICTOR
 
 def correct_FUPPREDICTOR_discrepencies(data_dir, discrepency_dir):
     """Generates the dataframe for FUPPREDICTOR with the data discrepencies fixed.
@@ -249,64 +356,17 @@ def correct_FUPPREDICTOR_discrepencies(data_dir, discrepency_dir):
     
     return df_FUPPREDICTOR
 
-def prepare_FUPPREDICTOR(data_dir, instruction_dir, discrepency_dir):
-    #Read the instruction Excel of which features to use and how to process them
-    instructions = pd.read_excel(instruction_dir)
-    instructions = instructions[(instructions["CRF_name"]=="FUPPREDICTOR")&(instructions["Need-1"]=="Yes")]
+def prepare_GENOTYPE(data_dir, instruction_dir):
+    """Reads the Genotype raw dataset, fill NAs according to the instructions,
+       and then one-hot encode the dataset.
 
-    #Create the dictionary of the types for each feature in the instructions csv file
-    type_dic = get_type_dic(instructions)
+    Args:
+        data_dir (string): Path to the data excel file.
+        instruction_dir (string): Path to the instructions directory.
 
-    #Read the data, and then fix the discrepencies
-    df_FUPPREDICTOR = correct_FUPPREDICTOR_discrepencies(data_dir, discrepency_dir)
-
-    #Change the datatype of the columns according to the instructions
-    df_FUPPREDICTOR = df_FUPPREDICTOR.astype(type_dic)
-    
-    #Only keep the values that we determined in the instructions
-    df_FUPPREDICTOR = df_FUPPREDICTOR[type_dic.keys()]
-
-    #There are weird/wrong values in some columns of the the dataset. 
-    #We use the encoding to only keep the relevant values, then make the rest of the values NA
-    df_FUPPREDICTOR = remove_incorrect_values(df_FUPPREDICTOR, instructions)
-
-    #Taking care of the NAs in the wtfukg (weights) in FUPPREDICTOR
-    df_BASELINE_weights = pd.read_excel(data_dir, header=0, usecols=["wtbaskg", "uniqid"], sheet_name = "BASELINE",  engine="openpyxl")
-
-    #For the follow-up weights, if it is missing, use the mean of the other follow-up weights
-    #However, if all follow-up weights are misssing, use the weights recorded in Baseline
-    #If both follow-up weights and baseline weights are missing, use 75.0 as the weights
-    for ind in df_FUPPREDICTOR[df_FUPPREDICTOR["wtfukg"].isna()].index:
-        patient_id = df_FUPPREDICTOR.loc[ind,"uniqid"] #Get the patient ID
-        baseline_weight = df_BASELINE_weights[df_BASELINE_weights["uniqid"]==patient_id]["wtbaskg"].values[0]
-        mean = np.mean([i for i in df_FUPPREDICTOR[df_FUPPREDICTOR["uniqid"]==patient_id]["wtfukg"] if ~pd.isna(i)])
-
-        if pd.isna(mean) & ~pd.isna(baseline_weight):
-            df_FUPPREDICTOR.loc[ind, "wtfukg"] = baseline_weight
-        elif pd.isna(mean) & pd.isna(baseline_weight):
-            df_FUPPREDICTOR.loc[ind, "wtfukg"] = 75.0
-        else:
-            df_FUPPREDICTOR.loc[ind, "wtfukg"] = mean
-
-    #Fill the NAs in the dataset according to the instruciton csv
-    df_FUPPREDICTOR = fill_na_in_df(instructions, CRF_name="FUPPREDICTOR", df_data=df_FUPPREDICTOR)
-    
-    #One the encoding dic to convert integers to strings for the  columns that will be one-hot-encoded
-    #One-hot encode the columns that need to be one-hot encoded
-
-
-    # df_FUPPREDICTOR = one_hot_prepare(instructions, df_FUPPREDICTOR)
-    df_FUPPREDICTOR = one_hot_encode(instructions, df_FUPPREDICTOR)
-
-    #One-hot encode the columns that need to be one-hot encoded
-    # for col in instructions[instructions["Preprocessing"]=="One-hot"]["Abbreviation"]:
-    #     one_hotted = pd.get_dummies(df_FUPPREDICTOR[col], prefix = col)
-    #     df_FUPPREDICTOR = pd.concat([df_FUPPREDICTOR, one_hotted], axis=1)
-    #     del(df_FUPPREDICTOR[col])
-        
-    return df_FUPPREDICTOR
-
-def prepare_GENOTYPE(data_dir, instruction_dir):    
+    Returns:
+        pandas.df: The genotype data.
+    """
     #Read the instruction csv of which features to use and how to process them
     instructions = pd.read_excel(instruction_dir)
     instructions = instructions[(instructions["CRF_name"]=="GENOTYPE")&(instructions["Need-1"]=="Yes")]
@@ -330,6 +390,14 @@ def prepare_GENOTYPE(data_dir, instruction_dir):
     return df_GENOTYPE
 
 def prepare_AD1(data_dir):
+    """Read the AD1 data after doing some cleaning.
+
+    Args:
+        data_dir (string): Path to the data excel file.
+
+    Returns:
+        pandas.df: AD1 (target) data.
+    """
     df_AD1 = pd.read_excel(data_dir, header=0, sheet_name = "AD1",  engine="openpyxl")
 
     #Remove rows in AD1 where both blddtadj and blddtadj_yy are NAs
@@ -340,9 +408,16 @@ def prepare_AD1(data_dir):
     
     return df_AD1
 
-
-
 def prepare_FUPDISCONT(data_dir, instruction_dir):
+    """Read the FUPDISCONT data.
+
+    Args:
+        data_dir (string): Path to the data excel file.
+        instruction_dir (string): Path to the instructions excel file.
+
+    Returns:
+        pandas.df: FUPDISCONT data.
+    """
     #Read the excel file for instructions to be performed on the columns of Baseline
     instructions = pd.read_excel(instruction_dir)
     instructions = instructions[(instructions["CRF_name"]=="FUPDISCONT")&(instructions["Need-1"]=="Yes")]
@@ -356,7 +431,13 @@ def prepare_FUPDISCONT(data_dir, instruction_dir):
     return df_FUPDISCONT
 
 def prepare_BASELINE(data_dir, instruction_dir, discrepency_dir):
-    #def initialize_BASELINE_dataset(data_dir, instruction_dir):    
+    """Read the raw Baseline data, cleans the data, and then one-hot encode the necessary variables.
+
+    Args:
+        data_dir (string): Path to the data excel file.
+        instruction_dir (string): Path to the instructions excel file. 
+        discrepency_dir (string): Path to the discrepencies excel file.
+    """
     #Read the excel file for instructions to be performed on the columns of Baseline
     instructions = pd.read_excel(instruction_dir)
     instructions = instructions[(instructions["CRF_name"]=="BASELINE")&(instructions["Need-1"]=="Yes")]
@@ -481,9 +562,17 @@ def prepare_BASELINE(data_dir, instruction_dir, discrepency_dir):
 
     return df_BASELINE
 
-
-
 def read_format_rawdata(data_dir, instruction_dir, discrepency_dir):
+    """Reads, format, and prepare all the raw data.
+
+    Args:
+        data_dir (string): Path to the raw data excel file.
+        instruction_dir (string): Path to the instructions excel file.
+        discrepency_dir (string): Path to the discrepency excel file.
+
+    Returns:
+        pandas.df, pandas.df, pandas.df, pandas.df, pandas.df, pandas.df: df_FUPPREDICTOR, df_FUPOUTCOME, df_BASELINE, df_AD1, df_FUPDISCONT, df_GENOTYPE
+    """
     df_FUPPREDICTOR = prepare_FUPPREDICTOR(data_dir, instruction_dir, discrepency_dir)
     df_FUPOUTCOME = prepare_FUPOUTCOME(data_dir, instruction_dir, discrepency_dir)
     df_BASELINE = prepare_BASELINE(data_dir, instruction_dir, discrepency_dir)
@@ -494,6 +583,16 @@ def read_format_rawdata(data_dir, instruction_dir, discrepency_dir):
     return df_FUPPREDICTOR, df_FUPOUTCOME, df_BASELINE, df_AD1, df_FUPDISCONT, df_GENOTYPE
 
 def prepare_patient_dataset(data_dir, instruction_dir, discrepency_dir):
+    """Create a Dataset object from all the data.
+
+    Args:
+        data_dir (string): Path to the raw data excel file.
+        instruction_dir (string): Path to the instructions excel file.
+        discrepency_dir (string): Path to the discrepency excel file.
+
+    Returns:
+        Dataset: The Dataset object with all the patients.
+    """
     
     #Read the raw data, format and fill_NAs appropriately
     df_FUPPREDICTOR, df_FUPOUTCOME, df_BASELINE, df_AD1, df_FUPDISCONT, df_GENOTYPE = read_format_rawdata(data_dir, instruction_dir, discrepency_dir)
