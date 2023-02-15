@@ -287,9 +287,6 @@ class Patient():
         #The plotting array is the patient's FUPOUTCOME and FUPPREDICTOR data
         plotting_array = self.get_FUP_array().copy()
 
-        #Removing the uniqid columns from df
-        plotting_array = plotting_array.drop(["uniqid"], axis=1)
-
         #Change the column names of the FUP df
         plotting_array = change_col_names_in_df(instruction_dir=instruction_dir, df=plotting_array, df_name=["FUPPREDICTOR", "FUPOUTCOME"])
 
@@ -407,7 +404,7 @@ class Patient():
             pandas Dataframe: Pandas dataframe with both FUPPREDICTOR and FUPOUTCOME data.
         """
         FUP_Pred = self.FUPPREDICTOR.set_index("fudt").drop("uniqid", axis=1)
-        FUP_Outc = self.FUPOUTCOME.set_index("fuodt")
+        FUP_Outc = self.FUPOUTCOME.set_index("fuodt").drop("uniqid", axis=1)
         
         concated_df = pd.concat([FUP_Pred, FUP_Outc], axis=1, join="outer")
         
