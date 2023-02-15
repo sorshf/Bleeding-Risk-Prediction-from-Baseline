@@ -904,11 +904,15 @@ class Dataset():
                 baseline_date = patient.BASELINE["dtbas"].values[0]
                 patient.FUPPREDICTOR["years-since-baseline-visit"] = patient.FUPPREDICTOR.apply(lambda x: round(pd.Timedelta(x["fudt"] - baseline_date).days/365., 2), axis=1)
               
-    def get_data_x_y(self):
+    def get_data_x_y(self, baseline_filter, FUP_filter):
         """Returns the baseline, FUP data, and target of a Dataset object.
+        
+        Args:
+            baseline_filter (list[str]): List of feature names that shouldn't be included in the final baseline x.
+            FUP_filter (list[str]): List of features names that shouldn't be included in the final FUP dataset.
 
         Returns:
-            dict, list, list, list, list : FUPS_dic, FUP_columns, Baseline_list, Baseline_columns, target_lists
+            dict, list, pandas.df, pandas.series : FUPS_dict, list_FUP_cols, baseline_dataframe, target_series
         """
         
         FUPS_dict = dict() #A dictionary with keys:values corresponding to uniqid:FUP_numpy_arrays
@@ -917,16 +921,26 @@ class Dataset():
 
 
         for patient in self.all_patients:
-            baseline = patient.BASELINE.to_numpy(dtype="float32").flatten() #Baseline data
-            fups = patient.get_FUP_array().to_numpy(dtype="float32") #FUP data
+            baseline = patient.BASELINE.copy().to_numpy(dtype="float32").flatten() #Baseline data
+            fups = patient.get_FUP_array().copy().drop(columns=FUP_filter, axis=1).to_numpy(dtype="float32") #FUP data with specific columns dropped.
             target = patient.get_target() #Target data
             
             #Append the baseline, FUP, and target to the appropriate variable for each patient.
             FUPS_dict[patient.uniqid]=fups
             baseline_list.append(baseline)
             target_list.append(target)
-            
-        return FUPS_dict, list(patient.get_FUP_array().columns),  baseline_list, list(patient.BASELINE.columns), target_list
+        
+        #Using the BASELINE data above, create a pandas df and remove the unwanted features
+        #Using the target list above, create a pandas series
+        #Both the BASELINE df and target series are indexed using the uniqids
+        baseline_dataframe = pd.DataFrame(baseline_list, columns=patient.BASELINE.columns)
+        baseline_dataframe.index = baseline_dataframe["uniqid"].astype(int)
+        baseline_dataframe = baseline_dataframe.drop(columns=baseline_filter, axis=1)
+        target_series = pd.Series(target_list, index=baseline_dataframe.index.astype(int))    
+        
+        list_of_FUP_cols = list(patient.get_FUP_array().drop(columns=FUP_filter, axis=1).columns)
+        
+        return FUPS_dict, list_of_FUP_cols, baseline_dataframe, target_series
     
     def correct_FUPPREDICTION_with_new_columns(self):
         """For each patient, create 3 new columns in FUPS (diabmelfu, hypertfu, and atrfibfu) as PWELLS explained. 
