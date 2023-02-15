@@ -407,11 +407,12 @@ class Patient():
             pandas Dataframe: Pandas dataframe with both FUPPREDICTOR and FUPOUTCOME data.
         """
         FUP_Pred = self.FUPPREDICTOR.set_index("fudt").drop("uniqid", axis=1)
-        FUP_Outc = self.FUPOUTCOME.set_index("fuodt").drop("uniqid", axis=1)
+        FUP_Outc = self.FUPOUTCOME.set_index("fuodt")
         
         concated_df = pd.concat([FUP_Pred, FUP_Outc], axis=1, join="outer")
-        concated_df = concated_df.fillna(method="ffill")
-        concated_df = concated_df.fillna(method="bfill")
+        
+        if concated_df.isnull().values.any():
+            raise Exception(f"The FUPPREDICTOR and FUPOUTCOME for patient {self.uniqid} don't have the same length.")
         
         return concated_df        
 
