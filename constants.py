@@ -9,6 +9,9 @@ picled_objects = "./pickle_objects/"
 
 all_data_pics_path = "/Users/soroush/Library/CloudStorage/OneDrive-TheOttawaHospital/Bleeding/Bleeding Risk Prediction/all_data_pics/"
 
+#Directory to save the excel or csv files containing generated tables and stats 
+stats_directory = "/Users/soroush/Library/CloudStorage/OneDrive-TheOttawaHospital/Bleeding/Bleeding Risk Prediction/Stats/"
+
 #These dictionaries are for graphing the patients on timelines
 COLOR_dic = {
     "majbldconf":"red",
