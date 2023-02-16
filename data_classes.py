@@ -548,10 +548,9 @@ class Dataset():
     
     def __str__(self) -> str:
         
-        bleeders = [patient for patient in self.all_patients if patient.get_target() == 1]
-        non_bleeders = [patient for patient in self.all_patients if patient.get_target() == 0]
+        count_dic = self.get_all_targets_counts()
         
-        return f"The dataset {self.name}, contains {len(bleeders)} bleeders and {len(non_bleeders)} non-bleeders (total of {len(self.all_patients)} patients)."
+        return f"The dataset {self.name}, contains {count_dic['bleeders']} bleeders and {count_dic['non-bleeders']} non-bleeders (total of {count_dic['total']} patients)."
     
     def add_data_to_patient(self, uniqid, attr_name, attr_value):
         """If patient already exists, get the patient object and add the data.
@@ -903,7 +902,19 @@ class Dataset():
             if patient.FUPPREDICTOR is not None:
                 baseline_date = patient.BASELINE["dtbas"].values[0]
                 patient.FUPPREDICTOR["years-since-baseline-visit"] = patient.FUPPREDICTOR.apply(lambda x: round(pd.Timedelta(x["fudt"] - baseline_date).days/365., 2), axis=1)
-              
+    
+    def get_all_targets_counts(self):
+        bleeders_count = 0
+        non_bleeders_count = 0
+        
+        for patient in self:
+            if patient.get_target() == 0:
+                non_bleeders_count += 1
+            else:
+                bleeders_count += 1
+        
+        return {"bleeders":bleeders_count, "non-bleeders": non_bleeders_count, "total": len(self.all_patients)}
+    
     def get_data_x_y(self, baseline_filter, FUP_filter):
         """Returns the baseline, FUP data, and target of a Dataset object.
         
