@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 from cross_validation import kfold_cv
 import matplotlib.pyplot as plt
+from sklearn.dummy import DummyClassifier
 
 class HyperModelBaseline(keras_tuner.HyperModel):
     
@@ -481,3 +482,59 @@ def plot_history(history):
             ax.plot(range(1, len(history.history[metric])+1), history.history[metric],"-o", label=metric)
             ax.legend()
             ax.set_xlabel("Epochs")
+
+def dummy_classifiers(X_train, y_train, X_test, y_test):
+    """Trains two dummy classifiers and returns their performance metrics.
+
+    Args:
+        X_train (numpy.array): X_train
+        y_train (numpy.array): y_train
+        X_test (numpy.array): X_test
+        y_test (numpy.array): y_test
+
+    Returns:
+        dict: Dictionary of the performance metrics.
+    """
+    
+    all_baseline_dics = dict()
+
+    METRICS = [
+        keras.metrics.TruePositives(name='tp'),
+        keras.metrics.FalsePositives(name='fp'),
+        keras.metrics.TrueNegatives(name='tn'),
+        keras.metrics.FalseNegatives(name='fn'), 
+        keras.metrics.BinaryAccuracy(name='accuracy'),
+        keras.metrics.Precision(name='precision'),
+        keras.metrics.Recall(name='recall'),
+        keras.metrics.AUC(name='auc'),
+        keras.metrics.AUC(name='prc', curve='PR'), # precision-recall curve
+    ]
+    
+    dummy_clf_most_frequent = DummyClassifier(strategy="stratified", random_state=1375)
+    dummy_clf_most_frequent.name = "stratified"
+    
+    dummy_clf_prior = DummyClassifier(strategy="prior", random_state=1375)
+    dummy_clf_prior.name = "most_frequent"
+    
+    dummy_clf_uniform = DummyClassifier(strategy="uniform", random_state=1375)
+    dummy_clf_uniform.name = "uniform"
+    
+    for clf_object in [dummy_clf_most_frequent, dummy_clf_prior, dummy_clf_uniform]:
+        #train the clf
+        clf_object.fit(X_train, y_train)
+        
+        #y_pred
+        y_pred = clf_object.predict(X_test)
+                
+        #Metric
+        metric_dict = dict()
+        
+        for metric in METRICS:
+            metric_value = metric(y_test, y_pred).numpy()
+            metric_name = metric.name
+            metric_dict[metric_name] = metric_value
+            metric.reset_state()
+            
+        all_baseline_dics[clf_object.name] = metric_dict
+            
+    return all_baseline_dics
