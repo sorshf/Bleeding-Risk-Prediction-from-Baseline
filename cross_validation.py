@@ -5,35 +5,80 @@ import copy
 import numpy as np
 import tensorflow as tf
 
-def divide_into_stratified_fractions(y, fraction):
-    """Divide a binary series consists of 0 and 1 into two stratified sections according to the fractions, and return only their indeces.
+def divide_into_stratified_fractions(FUPS_dict, target_series, fraction):
+    """Divide a binary series consisting of 0 and 1 into two stratified groups (training and testing) 
+        based on the distribution of target_series and length of follow-ups. In other words, training and testing will
+        have the same proportion of positive and negative instances, and also same proportion of #-of-fup-visits.
 
     Args:
+        FUPS_dict (dict): Dict of follow-ups of uniqid:list(FUP_data).
         y (Pandas.Series): A series object where the indeces are the patient ids, and values are their labels. (Must be bianry 0, 1)
-        fraction (flaot): What fravtion of the initial values to be placed in the second list.
+        fraction (flaot): What fraction of the initial values to be placed in the testing set.
 
     Returns:
         list, list: The training indeces, the testing indeces.
     """
-    index_1 = list(y[y==1].index)
-    index_0 = list(y[y==0].index)
-    
+
+    #Training and testing indeces will be saved here
+    training_uniqids = []
+    testing_uniqids = []
+
+    #Create a dict of number of FUPs
+    positive_dic = dict()
+    negative_dic = dict()
+
+    #Populate positive and negative dict with their length
+    for idx in target_series.index:
+        len_fup = len(FUPS_dict[idx])
+        target_value = target_series[idx]
+        
+        if (target_value == 0) and len_fup in negative_dic:
+            negative_dic[len_fup].append(idx)
+        elif (target_value == 0) and len_fup not in negative_dic:
+            negative_dic[len_fup] = [idx]
+        elif (target_value == 1) and len_fup in positive_dic:
+            positive_dic[len_fup].append(idx)
+        elif (target_value == 1) and len_fup not in positive_dic:
+            positive_dic[len_fup] = [idx]
+
+    #Shuffle the values in the dict
     random.seed(1375)
-    np.random.seed(1375)
 
-    random.shuffle(index_0)
-    random.shuffle(index_1)
+    for value in positive_dic:
+        random.shuffle(positive_dic[value])
 
-    number_of_training_1 = int(len(index_1) * (1-fraction))
-    number_of_training_0 = int(len(index_0) * (1-fraction))
+    for value in negative_dic:
+        random.shuffle(negative_dic[value])
 
-    training_indeces = index_1[:number_of_training_1] + index_0[:number_of_training_0]
-    testing_indeces = index_1[number_of_training_1:] + index_0[number_of_training_0:]
+
+    #Add uniqids from each FUP length to the training or testing list
+    for len_fup in positive_dic:
+        num_of_testing_ids = int(fraction * len(positive_dic[len_fup]))
+        testing_uniqids.append(positive_dic[len_fup][:num_of_testing_ids])    
+        training_uniqids.append(positive_dic[len_fup][num_of_testing_ids:])
+        
+    for len_fup in negative_dic:
+        num_of_testing_ids = int(fraction * len(negative_dic[len_fup]))
+        testing_uniqids.append(negative_dic[len_fup][:num_of_testing_ids])    
+        training_uniqids.append(negative_dic[len_fup][num_of_testing_ids:])   
+        
+    #Func to flatten list of lists
+    def unravel_list(list_):
+        temp_list=[]
+        for sublist in list_:
+            for item in sublist:
+                temp_list.append(item)        
+        return temp_list
     
-    random.shuffle(training_indeces)
-    random.shuffle(testing_indeces)
+    #Flat the lists
+    testing_uniqids = unravel_list(testing_uniqids)
+    training_uniqids = unravel_list(training_uniqids)
     
-    return training_indeces, testing_indeces
+    #Shuffle data once more
+    random.shuffle(testing_uniqids)
+    random.shuffle(training_uniqids)
+    
+    return training_uniqids, testing_uniqids
 
 def kfold_indeces(y, k):
     """Yields k-fold stratified (training, testing) indeces for a binary series consists of 0 and 1.
