@@ -80,36 +80,52 @@ def divide_into_stratified_fractions(FUPS_dict, target_series, fraction):
     
     return training_uniqids, testing_uniqids
 
-def kfold_indeces(y, k):
-    """Yields k-fold stratified (training, testing) indeces for a binary series consists of 0 and 1.
+def kfold_indeces(y, k, FUPS_dict=None):
+    """Yields k-fold stratified groups (training and testing) based on the distribution of target_series (y) and 
+        length of follow-ups (only if FUPS_dict is provided). In other words, training and testing will have the 
+        same proportion of positive and negative instances, and also same proportion of #-of-fup-visits.
 
     Args:
         y (Pandas.Series): A series object where the indeces are the patient ids, and values are their labels. (Must be bianry 0, 1)
         k (int): Number of folds in k-fold CV.
+        FUPS_dict (dict (optional)): Dict of follow-ups of uniqid:list(FUP_data).
+
 
     Yields:
         list, list: The training indeces, the testing indeces.
     """
- 
-    index_1 = list(y[y==1].index)
-    index_0 = list(y[y==0].index)
+    if FUPS_dict is None:
+        index_1 = list(y[y==1].index)
+        index_0 = list(y[y==0].index)
 
-    random.seed(1375)
-    np.random.seed(1375)
-    random.shuffle(index_0)
-    random.shuffle(index_1)
-    
-    for ones, zeros in zip(np.array_split(index_1, k), np.array_split(index_0, k)):
-        testing = set(ones).union(set(zeros))
-        testing = list(testing)
-        random.shuffle(testing)
+        random.seed(1375)
+        np.random.seed(1375)
+        random.shuffle(index_0)
+        random.shuffle(index_1)
         
-        training = (set(index_1) - set(ones)).union((set(index_0) - set(zeros)))
-        training = list(training)
-        random.shuffle(training)
+        for ones, zeros in zip(np.array_split(index_1, k), np.array_split(index_0, k)):
+            testing = set(ones).union(set(zeros))
+            testing = list(testing)
+            random.shuffle(testing)
+            
+            training = (set(index_1) - set(ones)).union((set(index_0) - set(zeros)))
+            training = list(training)
+            random.shuffle(training)
+            
+            
+            yield training, testing
+    else:
+        y_targets = y.copy()
         
-        
-        yield training, testing
+        #Using the divide_into_stratified_fractions() to create k-fold stratified portions.
+        #This is based on the fact that (1/k)(1) = (1/(k-1))(1-(1/k)) where k is number of folds.
+        #That is, for each fold, retrieve the test_idx, then remove it from the y_targets,
+        #For the next fold, k=k-1, and (y_targets = t_targets - test_idx).
+        while (k>0):
+            _, testing_uniqids = divide_into_stratified_fractions(FUPS_dict, y_targets, 1/k)
+            k -= 1
+            y_targets = y_targets.drop(labels=testing_uniqids)
+            yield list(y.copy().drop(labels=testing_uniqids).index), testing_uniqids
 
 def normalize_training_validation(training_indeces, 
                                   validation_indeces, 
