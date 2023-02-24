@@ -130,9 +130,9 @@ def kfold_indeces(y, k, FUPS_dict=None):
 def normalize_training_validation(training_indeces, 
                                   validation_indeces, 
                                   baseline_data, 
-                                  FUPS_data_dic, 
+                                  FUPS_data_dict, 
                                   all_targets_data, 
-                                  timeseries_padding_value = -5.):
+                                  timeseries_padding_value):
     """Returns the training and validation data (after normalization) for the baseline and follow-ups data. 
        The training data and validation data can also be the training_val data and testing data.
        Note that the training data (or training-val) here is used to calculate the mean and std for normalization of the validation (or testing) data.
@@ -141,16 +141,16 @@ def normalize_training_validation(training_indeces,
         training_indeces (list): List of indeces of the panda dataframe (which are actually patient IDs) for the training set.
         validation_indeces (list): List of indeces of the panda dataframe (which are actually patient IDs) for the validation set.
         baseline_data (pandas.DataFrame): All the baseline data.
-        FUPS_data_dic (dict): The dictionary of all the FUP data. Keys are the ids, and values are 2D array of (timeline, features).
+        FUPS_data_dict (dict): The dictionary of all the FUP data. Keys are the ids, and values are 2D array of (timeline, features).
         all_targets_data (pandas.Series): The labels of all the data.
-        timeseries_padding_value (float, optional): The value used to pad the timeseries data. Defaults to -5.0 .
+        timeseries_padding_value (float): The value used to pad the timeseries data.
 
     Yields:
         _type_: (baseline_train_X, fups_train_X, train_y), (baseline_valid_X, fups_valid_X, valid_y)
     """
     
     baseline_data = baseline_data.copy()
-    FUPS_data_dic = copy.deepcopy(FUPS_data_dic)
+    FUPS_data_dic = copy.deepcopy(FUPS_data_dict)
     
     #Get the training data
     baseline_train_X, fups_train_X, train_y = get_X_y_from_indeces(indeces = training_indeces, 
@@ -204,16 +204,16 @@ def normalize_training_validation(training_indeces,
 def kfold_cv(training_val_x_baseline, 
              training_val_x_FUPS, 
              training_val_y,
-             k =5, 
-             timeseries_padding_value =-5.) :
+             k, 
+             timeseries_padding_value) :
     """Yields k-fold training and validation portions (which are appropriately normalized) for training and hyperparameter optimization.
 
     Args:
         training_val_x_baseline (pandas.DataFrame): The training dataframe.
         training_val_x_FUPS (dict): The dictionary of FUP data. Keys are the ids, and values are 2D array of (timeline, features).
         training_val_y (pandas.Series): The labels of the data.
-        k (int, optional): Number of k-fold cv. Defaults to 5.
-        timeseries_padding_value (float, optional): The value used to pad the timeseries data. Defaults to -5.0 .
+        k (int): Number of k-fold cv.
+        timeseries_padding_value (float): The value used to pad the timeseries data.
 
     Yields:
         _type_: (baseline_train_X, fups_train_X, train_y), (baseline_valid_X, fups_valid_X, valid_y)
@@ -224,14 +224,14 @@ def kfold_cv(training_val_x_baseline,
     
     
     #Perform k-fold cross-validation
-    for fold_training_idx, fold_validation_idx in kfold_indeces(training_val_y, k):
+    for fold_training_idx, fold_validation_idx in kfold_indeces(training_val_y, k, training_val_x_FUPS):
         
         (baseline_train_X, fups_train_X, train_y), (baseline_valid_X, fups_valid_X, valid_y) = normalize_training_validation(training_indeces = fold_training_idx, 
                                                                                                                             validation_indeces = fold_validation_idx, 
                                                                                                                             baseline_data = training_val_x_baseline_copy, 
                                                                                                                             FUPS_data_dic = training_val_x_FUPS_copy, 
                                                                                                                             all_targets_data = training_val_y, 
-                                                                                                                            timeseries_padding_value=-5.)
+                                                                                                                            timeseries_padding_value=timeseries_padding_value)
         
         
         yield  (baseline_train_X, fups_train_X, train_y), (baseline_valid_X, fups_valid_X, valid_y)
@@ -246,7 +246,7 @@ def get_timeseries_mean_std(X_train):
         np.array, np.array: Two arrays of mean and std.
     """
     #decompose the list of lists into one list.
-    X_train_copy = [item for patient in X_train.copy() for item in patient]
+    X_train_copy = [item for patient in copy.deepcopy(X_train) for item in patient]
     
     #Reshape the training data from 3D to 2D
     X_train_copy = np.array(X_train_copy)
@@ -262,43 +262,17 @@ def get_timeseries_mean_std(X_train):
     
     return mean, std
 
-def get_timeseries_max_min(X_train):
-    """Calculates the max and min of a 3 Dimentional timeseries data of shape (sample, time, features).
-
-    Args:
-        X_train (list): list of lists containing the timeseries data.
-
-    Returns:
-        np.array, np.array: Two arrays of max and min.
-    """
-    #decompose the list of lists into one list.
-    X_train_copy = [item for patient in X_train.copy() for item in patient]
-    
-    #Reshape the training data from 3D to 2D
-    X_train_copy = np.array(X_train_copy)
-    
-    #Calculate the mean and std of the data
-    max = np.max(X_train_copy, axis=0)
-    min = np.min(X_train_copy, axis=0)
-    
-    print(min)
-    print(max)
-    
-    
-    return max, min
-
-
 def normalize_data(X_train, 
                    is_timeseries, 
                    is_training, 
                    mean,
                    std,
                    timeseries_padding_value):
-    """Normalize the data for Timeseries data (array of shape (sample, time, features)), or non timeseries ones
-       (array of shape (sample, features)).
+    """Normalize (mean 0 and std of 1) the data for Timeseries data (array of shape (sample, time, features)), or non timeseries ones
+       (pandas dataframe of shape (sample, features)).
 
     Args:
-        X_train (np.array): Numpy array of data.
+        X_train (pd.Dataframe | list): Dataframe of baseline, or list of numpy arrays of different lengths.
         is_timeseries (bool): Whether this is a timesereis data.
         is_training (bool): Whether this is the training set (so we can get its mean and std)
         mean (np.array): Mean of the features (this is only used when is_training==False)
@@ -311,47 +285,31 @@ def normalize_data(X_train,
     if is_timeseries:
         
         #Copy the data
-        X_train_copy = X_train.copy()
+        X_train_copy = copy.deepcopy(X_train)
         
         #For the training, we get its mean and std, otherwise mean and std should be provided
         if is_training:
-            mean, std = get_timeseries_mean_std(X_train_copy)  #Get the mean and std
-            #max, min = get_timeseries_max_min(X_train_copy)  #Get the max and min of data
-            #Pad the timeseries data with the padding value
-            X_train_copy = tf.keras.preprocessing.sequence.pad_sequences(X_train_copy, padding="post", dtype='float32', 
-                                                            value=timeseries_padding_value)
-            
-            #Normalize the data (We shouldn't touch the padding values, hence the if statement)
-            for sample in range(len(X_train_copy)):
-                for timeline in range(X_train_copy.shape[1]):
-                    if (X_train_copy[sample][timeline]!=np.array([timeseries_padding_value]*X_train_copy.shape[2], dtype='float32')).all():
-                        X_train_copy[sample][timeline] -=  mean
-                        X_train_copy[sample][timeline] /=  std
-                        
-                        #X_train_copy[sample][timeline] = (X_train_copy[sample][timeline] - min) / (max - min)
-                        
-                        
-        #If it is not training, we use the mean and std to normalize the data, and then pad the sequence
+            #Get the mean and std
+            mean, std = get_timeseries_mean_std(X_train_copy)
         else:
-            new_patient_list = []
-            for patient in X_train_copy:
-                new_timeline_list = []
-                
-                for time in patient:
-                    time -=  mean
-                    time /=  std                    
-                    new_timeline_list.append(time)
-                new_patient_list.append(new_timeline_list)
-                
-            X_train_copy = new_patient_list
-            X_train_copy = tf.keras.preprocessing.sequence.pad_sequences(X_train_copy, dtype="float32", padding="post", value=timeseries_padding_value)
+            assert mean.shape[-1] == X_train_copy[0].shape[-1] #There should be the same num of features in mean and X_train
+            assert std.shape[-1] == X_train_copy[0].shape[-1] #There should be the same num of features in std and X_train
             
-            
+        #Create a new list, go through timestamps for each patient and normalize it, then add to the list
+        normalized_patients_list = []
+        for patient in X_train_copy:
+            new_timeline_list = []
+            for time in patient:
+                time -=  mean
+                time /=  std                    
+                new_timeline_list.append(time)
+            normalized_patients_list.append(new_timeline_list)
         
-
+        #Pad the timeseries data with the padding value
+        X_train_copy = tf.keras.preprocessing.sequence.pad_sequences(normalized_patients_list, padding="post", dtype='float32', 
+                                                        value=timeseries_padding_value)    
         
-        #If it is training, also return the mean and std to be used for validation and testing
-        #Also return max and min
+        #If it is training, also return the mean and std        
         if is_training:
             return X_train_copy, mean, std
         else:
@@ -367,11 +325,17 @@ def normalize_data(X_train,
         if is_training:
             mean = np.mean(X_train, axis=0)
             std = np.std(X_train, axis=0)
+            for idx in std.index:
+                if std[idx]==0:
+                    std[idx] = 1.
+        else:
+            assert mean.shape[-1] == X_train_copy.shape[-1] #There should be the same num of features in mean and X_train_copy
+            assert std.shape[-1] == X_train_copy.shape[-1] #There should be the same num of features in std and X_train_copy
         
         X_train_copy -=  mean
         X_train_copy /=  std
         
-        #If it is training, also return the mean and std to be used for validation and testing
+        #If it is training, also return the mean and std to be used for validation or testing
         if is_training:
             return X_train_copy, mean, std
         else:
@@ -395,14 +359,11 @@ def get_X_y_from_indeces(indeces,
     #Creating a copy of dic is necessary to prevent referencing the original dic for processing
     FUPS_data_dic_copy = copy.deepcopy(FUPS_data_dic)
     
+    #Get the subset of baseline data and the fups dict
     baseline_X = baseline_data.loc[indeces,:]
     fups_X = {uniqid:FUPS_data_dic_copy[uniqid] for uniqid in indeces}
     
-    #We pad the timeseries data only if it is the training set
-    # if is_training:
-    #     fups_X = tf.keras.preprocessing.sequence.pad_sequences(fups_X, padding="post", dtype='float32', 
-    #                                                         value=timeseries_padding_value)
+    #Extract the relevant targets
     y = all_targets_data[indeces]
     
     return baseline_X, fups_X, y
-
