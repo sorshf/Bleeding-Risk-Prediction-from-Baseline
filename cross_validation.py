@@ -229,7 +229,7 @@ def kfold_cv(training_val_x_baseline,
         (baseline_train_X, fups_train_X, train_y), (baseline_valid_X, fups_valid_X, valid_y) = normalize_training_validation(training_indeces = fold_training_idx, 
                                                                                                                             validation_indeces = fold_validation_idx, 
                                                                                                                             baseline_data = training_val_x_baseline_copy, 
-                                                                                                                            FUPS_data_dic = training_val_x_FUPS_copy, 
+                                                                                                                            FUPS_data_dict = training_val_x_FUPS_copy, 
                                                                                                                             all_targets_data = training_val_y, 
                                                                                                                             timeseries_padding_value=timeseries_padding_value)
         
