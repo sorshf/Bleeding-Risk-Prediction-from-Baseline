@@ -9,6 +9,9 @@ pickle_objects/
 Raw Data/
 Stats/
 
+#My experimental codes
+misceleanous.py
+
 #MacOS Ds_Store and the jupyter notebooks
 .DS_Store
 *.ipynb
