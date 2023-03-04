@@ -5,7 +5,7 @@ import copy
 import numpy as np
 import tensorflow as tf
 
-def divide_into_stratified_fractions(FUPS_dict, target_series, fraction):
+def divide_into_stratified_fractions(FUPS_dict, target_series, fraction, deterministic=True):
     """Divide a binary series consisting of 0 and 1 into two stratified groups (training and testing) 
         based on the distribution of target_series and length of follow-ups. In other words, training and testing will
         have the same proportion of positive and negative instances, and also same proportion of #-of-fup-visits.
@@ -14,6 +14,7 @@ def divide_into_stratified_fractions(FUPS_dict, target_series, fraction):
         FUPS_dict (dict): Dict of follow-ups of uniqid:list(FUP_data).
         y (Pandas.Series): A series object where the indeces are the patient ids, and values are their labels. (Must be bianry 0, 1)
         fraction (flaot): What fraction of the initial values to be placed in the testing set.
+        deterministic (bool (optional)): Whether the generated fractions should be deterministic (seeded) or not. Defaults to True.
 
     Returns:
         list, list: The training indeces, the testing indeces.
@@ -41,8 +42,9 @@ def divide_into_stratified_fractions(FUPS_dict, target_series, fraction):
         elif (target_value == 1) and len_fup not in positive_dic:
             positive_dic[len_fup] = [idx]
 
-    #Shuffle the values in the dict
-    random.seed(1375)
+    #Shuffle the values in the dict determinstically
+    if deterministic:
+        random.seed(1375)
 
     for value in positive_dic:
         random.shuffle(positive_dic[value])
