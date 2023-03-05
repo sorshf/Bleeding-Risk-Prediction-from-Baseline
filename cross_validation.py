@@ -82,7 +82,7 @@ def divide_into_stratified_fractions(FUPS_dict, target_series, fraction, determi
     
     return training_uniqids, testing_uniqids
 
-def kfold_indeces(y, k, FUPS_dict=None):
+def kfold_indeces(y, k, FUPS_dict=None, deterministic=True):
     """Yields k-fold stratified groups (training and testing) based on the distribution of target_series (y) and 
         length of follow-ups (only if FUPS_dict is provided). In other words, training and testing will have the 
         same proportion of positive and negative instances, and also same proportion of #-of-fup-visits.
@@ -91,6 +91,7 @@ def kfold_indeces(y, k, FUPS_dict=None):
         y (Pandas.Series): A series object where the indeces are the patient ids, and values are their labels. (Must be bianry 0, 1)
         k (int): Number of folds in k-fold CV.
         FUPS_dict (dict (optional)): Dict of follow-ups of uniqid:list(FUP_data).
+        deterministic (bool (optional)): Whether the generated fractions should be deterministic (seeded) or not. Defaults to True.
 
 
     Yields:
@@ -100,8 +101,11 @@ def kfold_indeces(y, k, FUPS_dict=None):
         index_1 = list(y[y==1].index)
         index_0 = list(y[y==0].index)
 
-        random.seed(1375)
-        np.random.seed(1375)
+        #If shuffling should be deterministic.
+        if deterministic:
+            random.seed(1375)
+            np.random.seed(1375)
+            
         random.shuffle(index_0)
         random.shuffle(index_1)
         
@@ -124,7 +128,7 @@ def kfold_indeces(y, k, FUPS_dict=None):
         #That is, for each fold, retrieve the test_idx, then remove it from the y_targets,
         #For the next fold, k=k-1, and (y_targets = t_targets - test_idx).
         while (k>0):
-            _, testing_uniqids = divide_into_stratified_fractions(FUPS_dict, y_targets, 1/k)
+            _, testing_uniqids = divide_into_stratified_fractions(FUPS_dict, y_targets, 1/k, deterministic=deterministic)
             k -= 1
             y_targets = y_targets.drop(labels=testing_uniqids)
             yield list(y.copy().drop(labels=testing_uniqids).index), testing_uniqids
@@ -207,7 +211,8 @@ def kfold_cv(training_val_x_baseline,
              training_val_x_FUPS, 
              training_val_y,
              k, 
-             timeseries_padding_value) :
+             timeseries_padding_value,
+             deterministic) :
     """Yields k-fold training and validation portions (which are appropriately normalized) for training and hyperparameter optimization.
 
     Args:
@@ -216,6 +221,7 @@ def kfold_cv(training_val_x_baseline,
         training_val_y (pandas.Series): The labels of the data.
         k (int): Number of k-fold cv.
         timeseries_padding_value (float): The value used to pad the timeseries data.
+        deterministic (bool): Whether the generated fractions should be deterministic (seeded) or not.
 
     Yields:
         _type_: (baseline_train_X, fups_train_X, train_y), (baseline_valid_X, fups_valid_X, valid_y)
@@ -226,7 +232,7 @@ def kfold_cv(training_val_x_baseline,
     
     
     #Perform k-fold cross-validation
-    for fold_training_idx, fold_validation_idx in kfold_indeces(training_val_y, k, training_val_x_FUPS):
+    for fold_training_idx, fold_validation_idx in kfold_indeces(training_val_y, k, training_val_x_FUPS, deterministic):
         
         (baseline_train_X, fups_train_X, train_y), (baseline_valid_X, fups_valid_X, valid_y) = normalize_training_validation(training_indeces = fold_training_idx, 
                                                                                                                             validation_indeces = fold_validation_idx, 
