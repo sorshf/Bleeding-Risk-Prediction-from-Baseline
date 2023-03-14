@@ -158,6 +158,8 @@ def normalize_training_validation(training_indeces,
     baseline_data = baseline_data.copy()
     FUPS_data_dic = copy.deepcopy(FUPS_data_dict)
     
+    maximum_FUP_length = max([len(value) for value in FUPS_data_dic.values()])
+    
     #Get the training data
     baseline_train_X, fups_train_X, train_y = get_X_y_from_indeces(indeces = training_indeces, 
                                                                     baseline_data = baseline_data, 
@@ -169,7 +171,8 @@ def normalize_training_validation(training_indeces,
                                                                                     is_training=True,
                                                                                     mean=None,
                                                                                     std=None,
-                                                                                    timeseries_padding_value=None)
+                                                                                    timeseries_padding_value=None,
+                                                                                    maximum_FUP_length=None)
     
     #Normalize the timeseries FUP training data
     fups_train_X, mean_FUP_training, std_FUP_training = normalize_data(list(fups_train_X.values()), 
@@ -177,7 +180,8 @@ def normalize_training_validation(training_indeces,
                                                                         is_training=True,
                                                                         mean=None,
                                                                         std=None,
-                                                                        timeseries_padding_value=timeseries_padding_value)
+                                                                        timeseries_padding_value=timeseries_padding_value,
+                                                                        maximum_FUP_length=maximum_FUP_length)
     
 
     ####################################################################################
@@ -194,7 +198,8 @@ def normalize_training_validation(training_indeces,
                                     is_training=False,
                                     mean = mean_baseline_training,
                                     std = std_baseline_training,
-                                    timeseries_padding_value=None)
+                                    timeseries_padding_value=None,
+                                    maximum_FUP_length=None)
     
     #Normalize the timeseries FUP validation data
     fups_valid_X = normalize_data(list(fups_valid_X.values()), 
@@ -202,7 +207,8 @@ def normalize_training_validation(training_indeces,
                                 is_training=False,
                                 mean=mean_FUP_training,
                                 std=std_FUP_training,
-                                timeseries_padding_value=timeseries_padding_value)
+                                timeseries_padding_value=timeseries_padding_value,
+                                maximum_FUP_length=maximum_FUP_length)
     
     
     return (baseline_train_X, fups_train_X, train_y), (baseline_valid_X, fups_valid_X, valid_y)
@@ -275,7 +281,8 @@ def normalize_data(X_train,
                    is_training, 
                    mean,
                    std,
-                   timeseries_padding_value):
+                   timeseries_padding_value,
+                   maximum_FUP_length):
     """Normalize (mean 0 and std of 1) the data for Timeseries data (array of shape (sample, time, features)), or non timeseries ones
        (pandas dataframe of shape (sample, features)).
 
@@ -285,6 +292,8 @@ def normalize_data(X_train,
         is_training (bool): Whether this is the training set (so we can get its mean and std)
         mean (np.array): Mean of the features (this is only used when is_training==False)
         std (np.array): STD of the features (this is only used when is_training==False)
+        timeseries_padding_value (float): The value used to pad the timeseries data.
+        maximum_FUP_length (int): Maximum length of the timestamps in the data.
 
     Returns:
         np.array: Normalized array of the data
@@ -314,7 +323,7 @@ def normalize_data(X_train,
             normalized_patients_list.append(new_timeline_list)
         
         #Pad the timeseries data with the padding value
-        X_train_copy = tf.keras.preprocessing.sequence.pad_sequences(normalized_patients_list, padding="post", dtype='float32', 
+        X_train_copy = tf.keras.preprocessing.sequence.pad_sequences(normalized_patients_list, maxlen=maximum_FUP_length, padding="post", dtype='float32', 
                                                         value=timeseries_padding_value)    
         
         #If it is training, also return the mean and std        
