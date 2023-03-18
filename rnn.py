@@ -673,7 +673,7 @@ class Baseline_FUP_Multiinput_HyperModel(keras_tuner.HyperModel):
         xy = tf.keras.layers.concatenate([x, y])
         
         #Number of nodes in the final dense layer
-        num_final_nodes = hp.Choice(f"num_final_nodes_dense", [5, 10, 15])
+        num_final_nodes = (num_nodes_hidden_baseline+num_nodes_LSTM_FUP)//2
         
         #Final dropout rate
         final_dropout_rate = hp.Choice('final_dropout_rate', [0.1, 0.25])
@@ -687,7 +687,7 @@ class Baseline_FUP_Multiinput_HyperModel(keras_tuner.HyperModel):
                 
         
         x = dense(xy)
-        x = tf.keras.layers.Dropout(rate=final_dropout_rate, name= f"dropout_after_final_dense_layer")(x)
+        x = tf.keras.layers.Dropout(rate=final_dropout_rate, name= "dropout_after_final_dense_layer")(x)
 
                 
         final_output = tf.keras.layers.Dense(1, activation="sigmoid", name="final_output")(x)
