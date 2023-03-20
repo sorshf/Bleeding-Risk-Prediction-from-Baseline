@@ -211,7 +211,7 @@ class LastFUPHyperModel(keras_tuner.HyperModel):
         num_layers = hp.Int("num_dense_hidden_layers", 1, 3)
         
         #Number of nodes in the hidden layer(s)
-        num_nodes = hp.Choice(f"hidden_layer_units", [1, 5, 10, 15, 20, 30, 40, 50, 100])
+        num_nodes = hp.Choice(f"hidden_layer_units", [12, 15, 20, 30, 40, 50, 90])
         
         #The choice of regularizer for the layer
         regularizer = hp.Choice(f'regularizer', ["None", "l1_0.01", "l2_0.01", "l1_l2_0.01"])
@@ -409,7 +409,7 @@ class FUP_RNN_HyperModel(keras_tuner.HyperModel):
         num_layers = hp.Int("num_LSTM_layers", 1, 2)
         
         #Number of nodes in the hidden layer(s)
-        num_nodes = hp.Choice(f"LSTM_layer_units", [1, 5, 10, 15, 20, 30, 40, 50, 100])
+        num_nodes = hp.Choice(f"LSTM_layer_units", [12, 15, 20, 30, 40, 50, 90])
         
         #The choice of regularizer for the layer
         regularizer = hp.Choice(f'regularizer', ["None", "l1_0.01", "l2_0.01", "l1_l2_0.01"])
@@ -641,7 +641,7 @@ class Baseline_FUP_Multiinput_HyperModel(keras_tuner.HyperModel):
         num_layers_LSTM_fup = hp.Int("num_layers_LSTM_fup", 1, 2)
         
         #Number of nodes in the hidden layer(s)
-        num_nodes_LSTM_FUP = hp.Choice("LSTM_layer_units", [1, 5, 10, 15, 20, 30, 40, 50, 100])
+        num_nodes_LSTM_FUP = hp.Choice("LSTM_layer_units", [12, 15, 20, 30, 40, 50, 90])
         
         #The choice of regularizer for the layer
         regularizer_LSTM_FUP = hp.Choice('regularizer_LSTM_FUP', ["None", "l1_0.01", "l2_0.01", "l1_l2_0.01"])
