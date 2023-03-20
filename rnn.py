@@ -79,9 +79,9 @@ class BaselineHyperModel(keras_tuner.HyperModel):
         #Restricting the models which have the (num_nodes > 2*num_features) or (num_nodes < 2/3*num_features)
         num_nodes = hp.get("hidden_layer_units")
         num_features = len(features_index_to_keep_baseline)        
-        if (2/3*num_features > num_nodes > 2*num_features):
+        if not (2/3*num_features <= num_nodes <= 2*num_features):
             
-            print(f"Grid-Search Trial: {self.trial_number} omitted because when num_nodes ({num_nodes}) and num_features ({num_features}) --> (num_nodes > 2*num_features) or (num_nodes < 2/3*num_features)")
+            print(f"Grid-Search Trial: {self.trial_number} omitted because num_nodes ({num_nodes}) and num_features ({num_features})")
             
             #Increment the trial number
             self.trial_number += 1 
@@ -260,7 +260,7 @@ class LastFUPHyperModel(keras_tuner.HyperModel):
         #Restricting the models which have the (num_nodes > 2*num_features) or (num_nodes < 2/3*num_features)
         num_nodes = hp.get("hidden_layer_units")
         num_features = len(features_index_to_keep_fups)        
-        if (2/3*num_features > num_nodes > 2*num_features):
+        if not (2/3*num_features <= num_nodes <= 2*num_features):
             
             print(f"Grid-Search Trial: {self.trial_number} omitted because when num_nodes ({num_nodes}) and num_features ({num_features})")
             
@@ -459,10 +459,10 @@ class FUP_RNN_HyperModel(keras_tuner.HyperModel):
         
         #Restricting the models which have the (num_nodes > 2*num_features) or (num_nodes < 2/3*num_features)
         num_nodes = hp.get("LSTM_layer_units")
-        num_features = len(features_index_to_keep_fups)        
-        if (2/3*num_features > num_nodes > 2*num_features):
+        num_features = len(features_index_to_keep_fups)    
+        if not (2/3*num_features <= num_nodes <= 2*num_features):
             
-            print(f"Grid-Search Trial: {self.trial_number} omitted because when num_nodes ({num_nodes}) and num_features ({num_features}) --> (num_nodes > 2*num_features) or (num_nodes < 2/3*num_features)")
+            print(f"Grid-Search Trial: {self.trial_number} omitted because num_nodes ({num_nodes}) and num_features ({num_features})")
             
             #Increment the trial number
             self.trial_number += 1 
@@ -743,7 +743,7 @@ class Baseline_FUP_Multiinput_HyperModel(keras_tuner.HyperModel):
         num_features_fups = len(features_index_to_keep_fups)
         
               
-        if (2/3*num_features_fups > num_nodes_fups > 2*num_features_fups) or (2/3*num_features_baseline > num_nodes_baseline > 2*num_features_baseline):
+        if not (2/3*num_features_fups <= num_nodes_fups <= 2*num_features_fups) or not (2/3*num_features_baseline <= num_nodes_baseline <= 2*num_features_baseline):
             
             print(f"Grid-Search Trial: {self.trial_number} omitted because \
                   num_nodes_baseline: {num_nodes_baseline} |  num_features_baseline {num_features_baseline} \

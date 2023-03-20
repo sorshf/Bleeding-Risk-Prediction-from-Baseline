@@ -1,4 +1,5 @@
 from rnn import LastFUPHyperModel, BaselineHyperModel, FUP_RNN_HyperModel, Baseline_FUP_Multiinput_HyperModel
+from constants import instruction_dir
 import keras_tuner
 import pandas as pd
 from cross_validation import divide_into_stratified_fractions, get_X_y_from_indeces, normalize_training_validation
@@ -6,6 +7,8 @@ from sklearn.feature_selection import GenericUnivariateSelect, f_classif, mutual
 from sklearn.preprocessing import StandardScaler
 import numpy as np
 from constants import timeseries_padding_value
+from generate_stats import get_counts_all_zero_or_one_stats
+import copy
 import matplotlib.pyplot as plt
 from tensorflow import keras
 import tensorflow as tf
@@ -36,47 +39,66 @@ def get_important_feature_dic_baseline(baseline_dataset, target_list):
     
     return features_dict
 
-def create_feature_set_dicts_baseline_and_FUP(baseline_dataframe, FUP_columns, target_series):
+def create_feature_set_dicts_baseline_and_FUP(baseline_dataframe, FUP_columns, target_series, patient_dataset, mode):
     """Perform feature selection for the baseline data and FUP, then returns an appropriate dict for hyperparameter tuning.
 
     Args:
         baseline_dataframe (pd.dataframe): The baseline data (that come from training-val data) SHOULD NOT be standardized.
         FUP_columns (list): List of FUP feature names.
         target_series (pd.series): Target varaibles for the patients.
+        patient_dataset (Dataset): Patient datset that will be used for FUP feature selection.
+        mode (string): Whether we want "only FUP", "only Baseline", or "Both FUP and Baseline".
 
     Returns:
         dict: Dicts with keys "baseline_feature_sets" and "FUPS_feature_sets" containing the features sets for baseline and FUP.
     """
-    #Standardize the baseline dataframe
-    baseline_dataframe_standardized = pd.DataFrame(StandardScaler().fit_transform(baseline_dataframe.copy()), columns = baseline_dataframe.columns)
+    if mode in ["only Baseline", "Both FUP and Baseline"]:
+        #Standardize the baseline dataframe
+        baseline_dataframe_standardized = pd.DataFrame(StandardScaler().fit_transform(baseline_dataframe.copy()), columns = baseline_dataframe.columns)
 
-    #Perform feature selection with different number of features
-    baseline_feature_sets_dict = get_important_feature_dic_baseline(baseline_dataframe_standardized, target_series)
+        #Perform feature selection with different number of features
+        baseline_feature_sets_dict = get_important_feature_dic_baseline(baseline_dataframe_standardized, target_series)
 
-    #Convert the names to index for the values in the baseline_feature_sets_dict
-    indexed_feature_set_dict = dict()
-    all_cols = list(baseline_dataframe.columns)
+        #Convert the names to index for the values in the baseline_feature_sets_dict
+        indexed_feature_set_dict = dict()
+        all_cols = list(baseline_dataframe.columns)
 
-    for feature_set in baseline_feature_sets_dict:
-        indexed_feature = [all_cols.index(feature) for feature in baseline_feature_sets_dict[feature_set]]
-        indexed_feature_set_dict[feature_set] = indexed_feature
+        for feature_set in baseline_feature_sets_dict:
+            indexed_feature = [all_cols.index(feature) for feature in baseline_feature_sets_dict[feature_set]]
+            indexed_feature_set_dict[feature_set] = indexed_feature
         
     ####################
     ###################
 
-    #Two sets of features in FUP data
+    if mode in ["only FUP", "Both FUP and Baseline"]:
+        #sets of features in FUP data
 
-    FUP_features_sets = dict()
+        FUP_features_sets = dict()
 
-    FUP_features_sets["total"] = list(range(len(FUP_columns)))
+        FUP_features_sets["total"] = list(range(len(FUP_columns)))
 
-    features_without_new_no_continue_yes = [feature for feature in FUP_columns if (feature.find("_Yes")==-1) & (feature.find("_No")==-1) & \
-                                            (feature.find("_Continue")==-1) & (feature.find("_New")==-1)]
+        features_without_new_no_continue_yes = [feature for feature in FUP_columns if (feature.find("_Yes")==-1) & (feature.find("_No")==-1) & \
+                                                (feature.find("_Continue")==-1) & (feature.find("_New")==-1)]
 
 
-    FUP_features_sets["FUP_without_new_no_continue_yes"] = [FUP_columns.index(feature) for feature in features_without_new_no_continue_yes]
-
-    return {"baseline_feature_sets": indexed_feature_set_dict, "FUPS_feature_sets":FUP_features_sets}
+        FUP_features_sets["FUP_without_new_no_continue_yes"] = [FUP_columns.index(feature) for feature in features_without_new_no_continue_yes]
+        
+        
+        stat_df = get_counts_all_zero_or_one_stats(patient_dataset, instruction_dir)
+        stat_df = stat_df[stat_df["CRF"].isin(["FUPPREDICTOR", "FUPOUTCOME"])]
+        high_varience_features = stat_df[(stat_df["percent_patients_all_zero"]<96) & (stat_df["percent_patients_all_one"]<96)]["feature"]
+        
+        FUP_features_sets["high_varience_features"] = [FUP_columns.index(feature) for feature in high_varience_features]
+        
+        
+    if mode == "only Baseline":
+        return {"baseline_feature_sets": indexed_feature_set_dict}
+    elif mode == "only FUP":
+        return {"FUPS_feature_sets":FUP_features_sets}
+    elif mode == "Both FUP and Baseline":
+        return {"baseline_feature_sets": indexed_feature_set_dict, "FUPS_feature_sets":FUP_features_sets}
+    else:
+        raise Exception(f"The mode {mode} isn't recognized.")
 
 def run_baseline_dense_experiment(model_name, 
                                  directory_name, 
@@ -87,7 +109,8 @@ def run_baseline_dense_experiment(model_name,
                                  FUPS_dict,
                                  target_series,
                                  list_FUP_cols,
-                                 overwrite=False
+                                 patient_dataset,
+                                 overwrite=False,
                                  ):
     
     """Performs hyperparamter search, save the best model, and then test on the testing set for the lastFUP_dense experiment.
@@ -102,6 +125,7 @@ def run_baseline_dense_experiment(model_name,
         FUPS_dict (dict): The dictionary of FUP data. Keys are the ids, and values are 2D array of (timeline, features).
         target_series (pandas.Series): Pandas Series of all the patients labels.
         list_FUP_cols (list): The list of the feature names (in order) for the FUP columns.
+        patient_dataset (Dataset): All patient dataset object (this is only used for FUP feature selection).
         overwrite (bool): Whether to overwrite the keras-tuner results directory.
     """
     #Divide all the data into training and testing portions (two stratified parts) where the testing part consists 30% of the data
@@ -117,10 +141,9 @@ def run_baseline_dense_experiment(model_name,
                                                                             baseline_data = baseline_dataframe, 
                                                                             FUPS_data_dic = FUPS_dict, 
                                                                             all_targets_data = target_series)
-
+    
     #Create the feature selection dic (with different methods) for hyperparamter tuning
-    feature_selection_dict = create_feature_set_dicts_baseline_and_FUP(baseline_train_val_X, list_FUP_cols, train_val_y)
-    del feature_selection_dict["FUPS_feature_sets"] #Remove the FUPs feature sets becuase they aren't used here.
+    feature_selection_dict = create_feature_set_dicts_baseline_and_FUP(baseline_train_val_X, list_FUP_cols, train_val_y, patient_dataset, mode="only Baseline")
     
     #Define the tuner
     tuner = keras_tuner.RandomSearch(
@@ -225,6 +248,7 @@ def run_lastFUP_dense_experiment(model_name,
                                  FUPS_dict,
                                  target_series,
                                  list_FUP_cols,
+                                 patient_dataset,                                 
                                  overwrite=False
                                  ):
     
@@ -240,6 +264,7 @@ def run_lastFUP_dense_experiment(model_name,
         FUPS_dict (dict): The dictionary of FUP data. Keys are the ids, and values are 2D array of (timeline, features).
         target_series (pandas.Series): Pandas Series of all the patients labels.
         list_FUP_cols (list): The list of the feature names (in order) for the FUP columns.
+        patient_dataset (Dataset): All patient datset object (this is only used for FUP feature selection).        
         overwrite (bool): Whether to overwrite the keras-tuner results directory.
     """
     
@@ -258,8 +283,9 @@ def run_lastFUP_dense_experiment(model_name,
                                                                             all_targets_data = target_series)
 
     #Create the feature selection dic (with different methods) for hyperparamter tuning
-    feature_selection_dict = create_feature_set_dicts_baseline_and_FUP(baseline_train_val_X, list_FUP_cols, train_val_y)
-    del feature_selection_dict["baseline_feature_sets"] #Remove the baseline feature sets becuase they aren't used here.
+    patient_dataset_train_val = copy.deepcopy(patient_dataset)    #Keep only the train_val data for feature selection of the FUP data
+    patient_dataset_train_val.all_patients = [patient for patient in patient_dataset_train_val.all_patients if patient.uniqid in training_val_indeces]
+    feature_selection_dict = create_feature_set_dicts_baseline_and_FUP(baseline_train_val_X, list_FUP_cols, train_val_y, patient_dataset_train_val, mode="only FUP")
     
     #Define the tuner
     tuner = keras_tuner.RandomSearch(
@@ -363,6 +389,7 @@ def run_FUP_RNN_experiment(model_name,
                                  FUPS_dict,
                                  target_series,
                                  list_FUP_cols,
+                                 patient_dataset,                                                                  
                                  overwrite=False
                                  ):
     
@@ -378,6 +405,7 @@ def run_FUP_RNN_experiment(model_name,
         FUPS_dict (dict): The dictionary of FUP data. Keys are the ids, and values are 2D array of (timeline, features).
         target_series (pandas.Series): Pandas Series of all the patients labels.
         list_FUP_cols (list): The list of the feature names (in order) for the FUP columns.
+        patient_dataset (Dataset): All patient datset object (this is only used for FUP feature selection).        
         overwrite (bool): Whether to overwrite the keras-tuner results directory.
     """
     
@@ -396,8 +424,9 @@ def run_FUP_RNN_experiment(model_name,
                                                                             all_targets_data = target_series)
 
     #Create the feature selection dic (with different methods) for hyperparamter tuning
-    feature_selection_dict = create_feature_set_dicts_baseline_and_FUP(baseline_train_val_X, list_FUP_cols, train_val_y)
-    del feature_selection_dict["baseline_feature_sets"] #Remove the baseline feature sets becuase they aren't used here.
+    patient_dataset_train_val = copy.deepcopy(patient_dataset)    #Keep only the train_val data for feature selection of the FUP data
+    patient_dataset_train_val.all_patients = [patient for patient in patient_dataset_train_val.all_patients if patient.uniqid in training_val_indeces]
+    feature_selection_dict = create_feature_set_dicts_baseline_and_FUP(baseline_train_val_X, list_FUP_cols, train_val_y, patient_dataset_train_val, mode="only FUP")
     
     #Define the tuner
     tuner = keras_tuner.RandomSearch(
@@ -418,7 +447,7 @@ def run_FUP_RNN_experiment(model_name,
                 epochs = 50,
                 metric_name = metric_name,
                 metric_mode = metric_mode,
-                verbose = 1,
+                verbose = 0,
                 feature_set_dict=feature_selection_dict
                 )
     
@@ -499,6 +528,7 @@ def run_Baseline_FUP_multiinput_experiment(model_name,
                                  FUPS_dict,
                                  target_series,
                                  list_FUP_cols,
+                                 patient_dataset,                                                                  
                                  overwrite=False
                                  ):
     
@@ -514,6 +544,7 @@ def run_Baseline_FUP_multiinput_experiment(model_name,
         FUPS_dict (dict): The dictionary of FUP data. Keys are the ids, and values are 2D array of (timeline, features).
         target_series (pandas.Series): Pandas Series of all the patients labels.
         list_FUP_cols (list): The list of the feature names (in order) for the FUP columns.
+        patient_dataset (Dataset): All patient datset object (this is only used for FUP feature selection).        
         overwrite (bool): Whether to overwrite the keras-tuner results directory.
     """
     
@@ -532,7 +563,10 @@ def run_Baseline_FUP_multiinput_experiment(model_name,
                                                                             all_targets_data = target_series)
 
     #Create the feature selection dic (with different methods) for hyperparamter tuning
-    feature_selection_dict = create_feature_set_dicts_baseline_and_FUP(baseline_train_val_X, list_FUP_cols, train_val_y)
+    patient_dataset_train_val = copy.deepcopy(patient_dataset)    #Keep only the train_val data for feature selection of the FUP data
+    patient_dataset_train_val.all_patients = [patient for patient in patient_dataset_train_val.all_patients if patient.uniqid in training_val_indeces]
+    feature_selection_dict = create_feature_set_dicts_baseline_and_FUP(baseline_train_val_X, list_FUP_cols, train_val_y, patient_dataset_train_val, mode="Both FUP and Baseline")
+    
     
     #Define the tuner
     tuner = keras_tuner.RandomSearch(
