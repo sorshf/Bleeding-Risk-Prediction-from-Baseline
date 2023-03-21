@@ -1,4 +1,4 @@
-from rnn import LastFUPHyperModel, BaselineHyperModel, FUP_RNN_HyperModel, Baseline_FUP_Multiinput_HyperModel
+from rnn import LastFUPHyperModel, BaselineHyperModel, FUP_RNN_HyperModel, Baseline_FUP_Multiinput_HyperModel, dummy_classifiers
 from constants import instruction_dir
 import keras_tuner
 import pandas as pd
@@ -667,6 +667,43 @@ def run_Baseline_FUP_multiinput_experiment(model_name,
                             training_y=train_val_y, 
                             testing_x = [norm_test_baseline_X, norm_test_fups_X], 
                             testing_y = test_y)
+
+def run_dummy_experiment(model_name, 
+                        baseline_dataframe,
+                        FUPS_dict,
+                        target_series,
+                        ):
+    """Performs hyperparamter search, save the best model, and then test on the testing set for the lastFUP_dense experiment.
+
+    Args:
+        model_name (string): The name of the hypermodel (could be anything).
+        baseline_dataframe (pandas.DataFrame): The Baseline dataset.
+        FUPS_dict (dict): The dictionary of FUP data. Keys are the ids, and values are 2D array of (timeline, features).
+        target_series (pandas.Series): Pandas Series of all the patients labels.
+    """
+    
+    #Divide all the data into training and testing portions (two stratified parts) where the testing part consists 30% of the data
+    #Note, the training_val and testing portions are generated deterministically.
+    training_val_indeces, testing_indeces = divide_into_stratified_fractions(FUPS_dict, target_series.copy(), fraction=0.3)
+    
+    #Record the training_val and testing indeces
+    record_training_testing_indeces(model_name, training_val_indeces, testing_indeces)
+    
+    #Standardize the training data, and the test data.
+    norm_train_val_data , norm_test_data = normalize_training_validation(training_indeces = training_val_indeces, 
+                                                                        validation_indeces = testing_indeces, 
+                                                                        baseline_data = baseline_dataframe, 
+                                                                        FUPS_data_dict = FUPS_dict, 
+                                                                        all_targets_data = target_series, 
+                                                                        timeseries_padding_value=timeseries_padding_value)
+
+    #unwrap the training-val and testing variables
+    norm_train_val_baseline_X, _, train_val_y = norm_train_val_data
+    norm_test_baseline_X, _, test_y = norm_test_data
+    
+    dummy_classifiers(X_train=norm_train_val_baseline_X, y_train=train_val_y, X_test=norm_test_baseline_X, y_test=test_y)
+    
+    
 
 def get_best_number_of_training_epochs(tuner, metric_name, metric_mode, metric_cv_calc_mode):
     """Calculates the best number of epochs to train the model for.

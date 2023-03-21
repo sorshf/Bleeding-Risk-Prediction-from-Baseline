@@ -6,6 +6,7 @@ from constants import timeseries_padding_value, NUMBER_OF_ITERATIONS_CV
 from datetime import datetime
 from hypermodel_helper import *
 import copy
+from joblib import dump, load
 
 
 
@@ -875,7 +876,7 @@ class Baseline_FUP_Multiinput_HyperModel(keras_tuner.HyperModel):
 
 
 def dummy_classifiers(X_train, y_train, X_test, y_test):
-    """Trains two dummy classifiers and returns their performance metrics.
+    """Trains and tests 3 types of dummy classifiers and saves their performance metrics.
 
     Args:
         X_train (numpy.array): X_train
@@ -883,11 +884,9 @@ def dummy_classifiers(X_train, y_train, X_test, y_test):
         X_test (numpy.array): X_test
         y_test (numpy.array): y_test
 
-    Returns:
-        dict: Dictionary of the performance metrics.
     """
     
-    all_baseline_dics = dict()
+    all_data_dics = dict()
 
     METRICS = [
         tf.keras.metrics.TruePositives(name='tp'),
@@ -911,21 +910,53 @@ def dummy_classifiers(X_train, y_train, X_test, y_test):
     dummy_clf_uniform.name = "uniform"
     
     for clf_object in [dummy_clf_most_frequent, dummy_clf_prior, dummy_clf_uniform]:
+    
         #train the clf
         clf_object.fit(X_train, y_train)
         
-        #y_pred
-        y_pred = clf_object.predict(X_test)
-                
-        #Metric
-        metric_dict = dict()
+        #Save the model
+        dump(clf_object, f"./keras_tuner_results/{clf_object.name}.joblib")
+        #Load the model
         
-        for metric in METRICS:
-            metric_value = metric(y_test, y_pred).numpy()
-            metric_name = metric.name
-            metric_dict[metric_name] = metric_value
-            metric.reset_state()
+        clf_object = load(f"./keras_tuner_results/{clf_object.name}.joblib")
+        
+        #for each clf, test on the training and testing set then save the metrics.
+        for x, y, name in zip([X_train, X_test], [y_train, y_test], ["training", "testing"]):
             
-        all_baseline_dics[clf_object.name] = metric_dict
+            #y_pred
+            y_pred = clf_object.predict(x)
+                    
+            #Metric
+            metric_dict = dict()
             
-    return all_baseline_dics
+            for metric in METRICS:
+                metric_value = metric(y, y_pred).numpy()
+                metric_name = metric.name
+                metric_dict[metric_name] = metric_value
+                metric.reset_state()
+                
+            m = tf.keras.metrics.AUC()
+            m.update_state(y, y_pred)
+
+            # Set `x` and `y` values for the curves based on `curve` config.
+            recall = tf.math.divide_no_nan(
+                m.true_positives,
+                tf.math.add(m.true_positives, m.false_negatives))
+
+            fp_rate = tf.math.divide_no_nan(
+                    m.false_positives,
+                    tf.math.add(m.false_positives, m.true_negatives))
+
+            precision = tf.math.divide_no_nan(
+                    m.true_positives,
+                    tf.math.add(m.true_positives, m.false_positives))
+            
+            metric_dict["precision_curve"] = precision.numpy()
+            metric_dict["fp_rate"] = fp_rate.numpy()
+            metric_dict["recall_curve"] = recall.numpy()
+            metric_dict["thresholds"] = m.thresholds
+            
+            all_data_dics[name+"_"+clf_object.name] = metric_dict
+
+    pd.DataFrame.from_dict(all_data_dics, orient="index").to_pickle(f"./keras_tuner_results/Dummy_clfs.pkl")
+        
