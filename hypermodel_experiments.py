@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 from tensorflow import keras
 import tensorflow as tf
 import matplotlib
+import os
 matplotlib.use("Agg")
 
 
@@ -100,6 +101,8 @@ def create_feature_set_dicts_baseline_and_FUP(baseline_dataframe, FUP_columns, t
     else:
         raise Exception(f"The mode {mode} isn't recognized.")
 
+
+
 def run_baseline_dense_experiment(model_name, 
                                  directory_name, 
                                  metric_name, 
@@ -128,6 +131,11 @@ def run_baseline_dense_experiment(model_name,
         patient_dataset (Dataset): All patient dataset object (this is only used for FUP feature selection).
         overwrite (bool): Whether to overwrite the keras-tuner results directory.
     """
+    
+    #Create a dir to save the result of experiment
+    if not os.path.exists(f"./keras_tuner_results/{model_name}"):
+        os.makedirs(f"./keras_tuner_results/{model_name}")
+    
     #Divide all the data into training and testing portions (two stratified parts) where the testing part consists 30% of the data
     #Note, the training_val and testing portions are generated deterministically.
     training_val_indeces, testing_indeces = divide_into_stratified_fractions(FUPS_dict, target_series.copy(), fraction=0.3)
@@ -149,7 +157,7 @@ def run_baseline_dense_experiment(model_name,
     tuner = keras_tuner.RandomSearch(
                     BaselineHyperModel(name = model_name),
                     objective=keras_tuner.Objective(f"{metric_cv_calc_mode}_val_{metric_name}", metric_mode),
-                    max_trials=20,
+                    max_trials=10,
                     seed=1375,
                     overwrite = overwrite,
                     directory=directory_name,
@@ -268,6 +276,10 @@ def run_lastFUP_dense_experiment(model_name,
         overwrite (bool): Whether to overwrite the keras-tuner results directory.
     """
     
+    #Create a dir to save the result of experiment
+    if not os.path.exists(f"./keras_tuner_results/{model_name}"):
+        os.makedirs(f"./keras_tuner_results/{model_name}")
+        
     #Divide all the data into training and testing portions (two stratified parts) where the testing part consists 30% of the data
     #Note, the training_val and testing portions are generated deterministically.
     training_val_indeces, testing_indeces = divide_into_stratified_fractions(FUPS_dict, target_series.copy(), fraction=0.3)
@@ -291,7 +303,7 @@ def run_lastFUP_dense_experiment(model_name,
     tuner = keras_tuner.RandomSearch(
                     LastFUPHyperModel(name = model_name),
                     objective=keras_tuner.Objective(f"{metric_cv_calc_mode}_val_{metric_name}", metric_mode),
-                    max_trials=20,
+                    max_trials=10,
                     seed=1375,
                     overwrite = overwrite,
                     directory=directory_name,
@@ -408,7 +420,10 @@ def run_FUP_RNN_experiment(model_name,
         patient_dataset (Dataset): All patient datset object (this is only used for FUP feature selection).        
         overwrite (bool): Whether to overwrite the keras-tuner results directory.
     """
-    
+    #Create a dir to save the result of experiment
+    if not os.path.exists(f"./keras_tuner_results/{model_name}"):
+        os.makedirs(f"./keras_tuner_results/{model_name}")
+        
     #Divide all the data into training and testing portions (two stratified parts) where the testing part consists 30% of the data
     #Note, the training_val and testing portions are generated deterministically.
     training_val_indeces, testing_indeces = divide_into_stratified_fractions(FUPS_dict, target_series.copy(), fraction=0.3)
@@ -432,7 +447,7 @@ def run_FUP_RNN_experiment(model_name,
     tuner = keras_tuner.RandomSearch(
                     FUP_RNN_HyperModel(name = model_name),
                     objective=keras_tuner.Objective(f"{metric_cv_calc_mode}_val_{metric_name}", metric_mode),
-                    max_trials=20,
+                    max_trials=10,
                     seed=1375,
                     overwrite = overwrite,
                     directory=directory_name,
@@ -547,7 +562,10 @@ def run_Baseline_FUP_multiinput_experiment(model_name,
         patient_dataset (Dataset): All patient datset object (this is only used for FUP feature selection).        
         overwrite (bool): Whether to overwrite the keras-tuner results directory.
     """
-    
+    #Create a dir to save the result of experiment
+    if not os.path.exists(f"./keras_tuner_results/{model_name}"):
+        os.makedirs(f"./keras_tuner_results/{model_name}")
+        
     #Divide all the data into training and testing portions (two stratified parts) where the testing part consists 30% of the data
     #Note, the training_val and testing portions are generated deterministically.
     training_val_indeces, testing_indeces = divide_into_stratified_fractions(FUPS_dict, target_series.copy(), fraction=0.3)
@@ -572,7 +590,7 @@ def run_Baseline_FUP_multiinput_experiment(model_name,
     tuner = keras_tuner.RandomSearch(
                     Baseline_FUP_Multiinput_HyperModel(name = model_name),
                     objective=keras_tuner.Objective(f"{metric_cv_calc_mode}_val_{metric_name}", metric_mode),
-                    max_trials=30,
+                    max_trials=10,
                     seed=1375,
                     overwrite = overwrite,
                     directory=directory_name,
@@ -681,7 +699,10 @@ def run_dummy_experiment(model_name,
         FUPS_dict (dict): The dictionary of FUP data. Keys are the ids, and values are 2D array of (timeline, features).
         target_series (pandas.Series): Pandas Series of all the patients labels.
     """
-    
+    #Create a dir to save the result of experiment
+    if not os.path.exists(f"./keras_tuner_results/{model_name}"):
+        os.makedirs(f"./keras_tuner_results/{model_name}")
+        
     #Divide all the data into training and testing portions (two stratified parts) where the testing part consists 30% of the data
     #Note, the training_val and testing portions are generated deterministically.
     training_val_indeces, testing_indeces = divide_into_stratified_fractions(FUPS_dict, target_series.copy(), fraction=0.3)
@@ -844,10 +865,10 @@ def save_metrics_and_ROC_PR(model_name, model, training_x, training_y, testing_x
         
         all_data_dic[name] = res_dict
     
-    pd.DataFrame.from_dict(all_data_dic, orient="index").to_pickle(f"keras_tuner_results/{model_name}.pkl")
+    pd.DataFrame.from_dict(all_data_dic, orient="index").to_pickle(f"keras_tuner_results/{model_name}/{model_name}.pkl")
     
 def record_training_testing_indeces(model_name, training_val_indeces, testing_indeces):
     ids = training_val_indeces+testing_indeces
     labels = ["training_val"]*len(training_val_indeces) + ["testing"]*len(testing_indeces)
-    pd.DataFrame(data = {"uniqids":ids, "category":labels}).sort_values(by=["category", "uniqids"]).reset_index(drop=True).to_csv(f"./keras_tuner_results/{model_name}_testing_training_indeces.csv")
+    pd.DataFrame(data = {"uniqids":ids, "category":labels}).sort_values(by=["category", "uniqids"]).reset_index(drop=True).to_csv(f"./keras_tuner_results/{model_name}/{model_name}_testing_training_indeces.csv")
     

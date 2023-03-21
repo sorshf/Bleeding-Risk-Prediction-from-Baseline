@@ -915,10 +915,10 @@ def dummy_classifiers(X_train, y_train, X_test, y_test):
         clf_object.fit(X_train, y_train)
         
         #Save the model
-        dump(clf_object, f"./keras_tuner_results/{clf_object.name}.joblib")
+        dump(clf_object, f"./keras_tuner_results/Dummy_classifiers/{clf_object.name}_model.joblib")
         #Load the model
         
-        clf_object = load(f"./keras_tuner_results/{clf_object.name}.joblib")
+        clf_object = load(f"./keras_tuner_results/Dummy_classifiers/{clf_object.name}_model.joblib")
         
         #for each clf, test on the training and testing set then save the metrics.
         for x, y, name in zip([X_train, X_test], [y_train, y_test], ["training", "testing"]):
@@ -958,5 +958,5 @@ def dummy_classifiers(X_train, y_train, X_test, y_test):
             
             all_data_dics[name+"_"+clf_object.name] = metric_dict
 
-    pd.DataFrame.from_dict(all_data_dics, orient="index").to_pickle(f"./keras_tuner_results/Dummy_clfs.pkl")
+    pd.DataFrame.from_dict(all_data_dics, orient="index").to_pickle(f"./keras_tuner_results/Dummy_classifiers/Dummy_clfs_results.pkl")
         

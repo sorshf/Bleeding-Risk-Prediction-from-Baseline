@@ -25,8 +25,8 @@ def main(experiment_name):
     if experiment_name == "LastFUP_Dense":
         print(f"Performing {experiment_name} experiment. \n")
     
-        run_lastFUP_dense_experiment(model_name = "LastFUP_Dense", 
-                                    directory_name = "keras_tuner_results", 
+        run_lastFUP_dense_experiment(model_name = f"{experiment_name}", 
+                                    directory_name = f"./keras_tuner_results/{experiment_name}", 
                                     metric_name = "prc", 
                                     metric_mode = "max", 
                                     metric_cv_calc_mode = "median", 
@@ -41,8 +41,8 @@ def main(experiment_name):
     elif experiment_name == "Baseline_Dense":
         print(f"Performing {experiment_name} experiment. \n")
 
-        run_baseline_dense_experiment(model_name = "Baseline_Dense", 
-                                    directory_name = "keras_tuner_results", 
+        run_baseline_dense_experiment(model_name = f"{experiment_name}", 
+                                    directory_name = f"./keras_tuner_results/{experiment_name}", 
                                     metric_name = "prc", 
                                     metric_mode = "max", 
                                     metric_cv_calc_mode = "median", 
@@ -57,8 +57,8 @@ def main(experiment_name):
     elif experiment_name == "FUP_RNN":
         print(f"Performing {experiment_name} experiment. \n")
 
-        run_FUP_RNN_experiment(model_name = "FUP_RNN", 
-                                    directory_name = "keras_tuner_results", 
+        run_FUP_RNN_experiment(model_name = f"{experiment_name}", 
+                                    directory_name = f"./keras_tuner_results/{experiment_name}", 
                                     metric_name = "prc", 
                                     metric_mode = "max", 
                                     metric_cv_calc_mode = "median", 
@@ -73,8 +73,8 @@ def main(experiment_name):
     elif experiment_name == "FUP_Baseline_Multiinput":
         print(f"Performing {experiment_name} experiment. \n")
         
-        run_Baseline_FUP_multiinput_experiment(model_name = "FUP_Baseline_Multiinput", 
-                                    directory_name = "keras_tuner_results", 
+        run_Baseline_FUP_multiinput_experiment(model_name = f"{experiment_name}", 
+                                    directory_name = f"./keras_tuner_results/{experiment_name}", 
                                     metric_name = "prc", 
                                     metric_mode = "max", 
                                     metric_cv_calc_mode = "median", 

@@ -159,5 +159,5 @@ def record_history_values(hypermodel, model, history_dict, metric_name, mode, fo
     cv_results_dict[f"trial_{hypermodel.trial_number}_repeat{repeat_value}_fold_{fold_num}"] = fold_metric_copy
     
     #Record the results in case there was a problem
-    pd.DataFrame.from_dict(cv_results_dict, orient='index').to_csv(f"./keras_tuner_results/{hypermodel.name}_{hypermodel.unique_code}.csv")
+    pd.DataFrame.from_dict(cv_results_dict, orient='index').to_csv(f"./keras_tuner_results/{hypermodel.name}/{hypermodel.name}_{hypermodel.unique_code}.csv")
 
