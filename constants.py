@@ -1,16 +1,16 @@
-data_dir = "/Users/soroush/Library/CloudStorage/OneDrive-TheOttawaHospital/Bleeding/Bleeding Risk Prediction/Raw Data/data transferred Soroush with pwd.xlsx"
-instruction_dir = "/Users/soroush/Library/CloudStorage/OneDrive-TheOttawaHospital/Bleeding/Bleeding Risk Prediction/Raw Data/column_preprocessing_excel test_Mar13_2022.xlsx"
-discrepency_dir = "/Users/soroush/Library/CloudStorage/OneDrive-TheOttawaHospital/Bleeding/Bleeding Risk Prediction/Chantal_bleeding_revisions/2022-10-03  discrepencies_bleeding_data_Updated.xlsx"
+data_dir = "./Raw Data/data transferred Soroush with pwd.xlsx"
+instruction_dir = "./Raw Data/column_preprocessing_excel test_Mar13_2022.xlsx"
+discrepency_dir = "./Chantal_bleeding_revisions/2022-10-03  discrepencies_bleeding_data_Updated.xlsx"
 
 
 timeseries_padding_value = -5.
 
 picled_objects = "./pickle_objects/"
 
-all_data_pics_path = "/Users/soroush/Library/CloudStorage/OneDrive-TheOttawaHospital/Bleeding/Bleeding Risk Prediction/all_data_pics/"
+all_data_pics_path = "./all_data_pics/"
 
 #Directory to save the excel or csv files containing generated tables and stats 
-stats_directory = "/Users/soroush/Library/CloudStorage/OneDrive-TheOttawaHospital/Bleeding/Bleeding Risk Prediction/Stats/"
+stats_directory = "./Stats/"
 
 #These dictionaries are for graphing the patients on timelines
 COLOR_dic = {
@@ -48,3 +48,6 @@ ALPHA_dic = {
     "fups_disc":0.9,
     "baseline":0.6
 }
+
+#Number of Iterations for hyperparameter tuning and cv
+NUMBER_OF_ITERATIONS_CV = 5

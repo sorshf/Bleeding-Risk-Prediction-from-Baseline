@@ -12,6 +12,11 @@ Stats/
 #My experimental codes
 misceleanous.py
 
+#These are to run on the remote server
+*.yml
+*.sh
+*.zip
+
 #MacOS Ds_Store and the jupyter notebooks
 .DS_Store
 *.ipynb
