@@ -244,7 +244,7 @@ def run_baseline_dense_experiment(model_name,
     
     #Test on the testing set
     test_res = model.evaluate(norm_test_baseline_X, test_y)
-    pd.DataFrame.from_dict({metric:value for metric, value in zip(model_keras_tuner.metrics_names, test_res)}, orient="index", columns=["test"]).to_csv(f"{directory_name}/{model_name}_test_result.csv")
+    pd.DataFrame.from_dict({metric:value for metric, value in zip(model_keras_tuner.metrics_names, test_res)}, orient="index", columns=["test"]).to_csv(f"{directory_name}/{model_name}_test_results.csv")
 
     #Test on the testing set and training_val set
     #Note, we are testing on the test set with the same model twice (previous 2 lines) which is just for debugging.
@@ -253,7 +253,8 @@ def run_baseline_dense_experiment(model_name,
                             training_x=norm_train_val_baseline_X, 
                             training_y=train_val_y, 
                             testing_x = norm_test_baseline_X, 
-                            testing_y = test_y)
+                            testing_y = test_y,
+                            FUPS_dict = FUPS_dict)
 
 def run_lastFUP_dense_experiment(model_name, 
                                  directory_name, 
@@ -398,7 +399,8 @@ def run_lastFUP_dense_experiment(model_name,
                             training_x=norm_training_val_fups_X_last, 
                             training_y=train_val_y, 
                             testing_x = norm_test_fups_X_last, 
-                            testing_y = test_y)
+                            testing_y = test_y,
+                            FUPS_dict = FUPS_dict)
 
 def run_FUP_RNN_experiment(model_name, 
                                  directory_name, 
@@ -540,7 +542,8 @@ def run_FUP_RNN_experiment(model_name,
                             training_x=norm_train_val_fups_X, 
                             training_y=train_val_y, 
                             testing_x = norm_test_fups_X, 
-                            testing_y = test_y)
+                            testing_y = test_y,
+                            FUPS_dict = FUPS_dict)
 
 def run_Baseline_FUP_multiinput_experiment(model_name, 
                                  directory_name, 
@@ -692,7 +695,8 @@ def run_Baseline_FUP_multiinput_experiment(model_name,
                             training_x=[norm_train_val_baseline_X, norm_train_val_fups_X], 
                             training_y=train_val_y, 
                             testing_x = [norm_test_baseline_X, norm_test_fups_X], 
-                            testing_y = test_y)
+                            testing_y = test_y,
+                            FUPS_dict = FUPS_dict)
 
 def run_dummy_experiment(model_name, 
                         baseline_dataframe,
@@ -730,7 +734,11 @@ def run_dummy_experiment(model_name,
     norm_train_val_baseline_X, _, train_val_y = norm_train_val_data
     norm_test_baseline_X, _, test_y = norm_test_data
     
-    dummy_classifiers(X_train=norm_train_val_baseline_X, y_train=train_val_y, X_test=norm_test_baseline_X, y_test=test_y)
+    dummy_classifiers(X_train=norm_train_val_baseline_X, 
+                      y_train=train_val_y, 
+                      X_test=norm_test_baseline_X, 
+                      y_test=test_y,
+                      FUPS_dict = FUPS_dict)
     
     
 
@@ -828,7 +836,7 @@ def get_last_FUPs_array(fups_X, timeseries_padding_value):
         
     return np.array(final_FUP_array)
 
-def save_metrics_and_ROC_PR(model_name, model, training_x, training_y, testing_x, testing_y): 
+def save_metrics_and_ROC_PR(model_name, model, training_x, training_y, testing_x, testing_y, FUPS_dict): 
     """Evaluate the model on the training_x and testing_x, then saves the results as pickled pandas name.pkl
 
     Args:
@@ -838,6 +846,7 @@ def save_metrics_and_ROC_PR(model_name, model, training_x, training_y, testing_x
         training_y (numpy.array): Target y's for the training data.
         testing_x (numpy.array): Training data that is already normalized and has appropriate dimentions.
         testing_y (numpy.array): Target y's for the testing data.
+        FUPS_dict (dict): The dictionary of the FUP data. Keys are the ids, and values are 2D array of (timeline, features).
     """
     
     all_data_dic = dict()
@@ -852,6 +861,15 @@ def save_metrics_and_ROC_PR(model_name, model, training_x, training_y, testing_x
         y_pred = model.predict(x)
         m = tf.keras.metrics.AUC()
         m.update_state(y, y_pred)
+        
+        #Record exactly what are the predictions for each sample on the test dataset
+        if name == "testing":
+            y_pred_classes = (y_pred > 0.5).astype("int32").flatten()
+            number_of_FUP = [len(FUPS_dict[uniqid]) for uniqid in list(y.index)]
+            record_dict = {"uniqid":list(y.index),"FUP_numbers":number_of_FUP, "y_actual":y.values,
+                        "y_pred":y_pred.flatten(), "y_pred_classes":y_pred_classes}
+
+            pd.DataFrame(record_dict).to_csv(f"keras_tuner_results/{model_name}/{model_name}_detailed_test_results.csv")
 
         # Set `x` and `y` values for the curves based on `curve` config.
         recall = tf.math.divide_no_nan(
@@ -873,7 +891,7 @@ def save_metrics_and_ROC_PR(model_name, model, training_x, training_y, testing_x
         
         all_data_dic[name] = res_dict
     
-    pd.DataFrame.from_dict(all_data_dic, orient="index").to_pickle(f"keras_tuner_results/{model_name}/{model_name}.pkl")
+    pd.DataFrame.from_dict(all_data_dic, orient="index").to_pickle(f"keras_tuner_results/{model_name}/{model_name}_train_test_results.pkl")
     
 def record_training_testing_indeces(model_name, training_val_indeces, testing_indeces):
     ids = training_val_indeces+testing_indeces

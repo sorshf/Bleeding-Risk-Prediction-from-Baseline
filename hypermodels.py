@@ -908,7 +908,7 @@ class Baseline_FUP_Multiinput_HyperModel(keras_tuner.HyperModel):
             return history, model
 
 
-def dummy_classifiers(X_train, y_train, X_test, y_test):
+def dummy_classifiers(X_train, y_train, X_test, y_test, FUPS_dict):
     """Trains and tests 3 types of dummy classifiers and saves their performance metrics.
 
     Args:
@@ -916,6 +916,7 @@ def dummy_classifiers(X_train, y_train, X_test, y_test):
         y_train (numpy.array): y_train
         X_test (numpy.array): X_test
         y_test (numpy.array): y_test
+        FUPS_dict (dict): The dictionary of the FUP data. Keys are the ids, and values are 2D array of (timeline, features).
 
     """
     
@@ -958,6 +959,16 @@ def dummy_classifiers(X_train, y_train, X_test, y_test):
             
             #y_pred
             y_pred = clf_object.predict(x)
+            
+            #Record exactly what are the predictions for each sample on the test dataset
+            if name == "testing":
+                y_pred_classes = (y_pred > 0.5).astype("int32").flatten()
+                number_of_FUP = [len(FUPS_dict[uniqid]) for uniqid in list(y.index)]
+                record_dict = {"uniqid":list(y.index),"FUP_numbers":number_of_FUP, "y_actual":y.values,
+                            "y_pred":y_pred.flatten(), "y_pred_classes":y_pred_classes}
+
+                pd.DataFrame(record_dict).to_csv(f"keras_tuner_results/Dummy_classifiers/{clf_object.name}_detailed_test_results.csv")
+
                     
             #Metric
             metric_dict = dict()
@@ -991,5 +1002,5 @@ def dummy_classifiers(X_train, y_train, X_test, y_test):
             
             all_data_dics[name+"_"+clf_object.name] = metric_dict
 
-    pd.DataFrame.from_dict(all_data_dics, orient="index").to_pickle(f"./keras_tuner_results/Dummy_classifiers/Dummy_clfs_results.pkl")
+    pd.DataFrame.from_dict(all_data_dics, orient="index").to_pickle(f"./keras_tuner_results/Dummy_classifiers/Dummy_clfs_train_test_results.pkl")
         

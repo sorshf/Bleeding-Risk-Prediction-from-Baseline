@@ -6,7 +6,7 @@
 """The main module to run the experiments.
 
 Usage:
-    python3 train.py [Option]
+    python train.py [Option]
 
     Option:"Baseline_Dense", "LastFUP_Dense", "FUP_RNN", "FUP_Baseline_Multiinput", "Dummy_classifiers"
 
