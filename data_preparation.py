@@ -22,7 +22,7 @@ def get_type_dic(df_instructions):
         elif type_ == "object":
             type_dic[col_name] = object
         elif type_ == "Date":
-            type_dic[col_name] = 'datetime64'
+            type_dic[col_name] = 'datetime64[D]'
             
     return type_dic
 
