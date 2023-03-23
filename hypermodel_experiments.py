@@ -1,4 +1,4 @@
-from rnn import LastFUPHyperModel, BaselineHyperModel, FUP_RNN_HyperModel, Baseline_FUP_Multiinput_HyperModel, dummy_classifiers
+from hypermodels import LastFUPHyperModel, BaselineHyperModel, FUP_RNN_HyperModel, Baseline_FUP_Multiinput_HyperModel, dummy_classifiers
 from constants import instruction_dir
 import keras_tuner
 import pandas as pd
