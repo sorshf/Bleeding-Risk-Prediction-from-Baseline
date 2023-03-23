@@ -7,6 +7,7 @@ from datetime import datetime
 from hypermodel_helper import *
 import copy
 from joblib import dump, load
+import time
 
 
 
@@ -59,6 +60,9 @@ class BaselineHyperModel(keras_tuner.HyperModel):
     
     def fit(self, hp, model, x, y, class_weight=None, grid_search=False, metric_name = None, metric_mode=None, feature_set_dict=None, callbacks=None, **kwargs):
 
+        #Record the start time to calc total time
+        start_time = time.time()
+        
         #A dictionary that will store the validation metrics recorded for a given trial
         trial_metrics_dict = dict()
         
@@ -155,6 +159,9 @@ class BaselineHyperModel(keras_tuner.HyperModel):
             #Increment the trial number
             self.trial_number += 1 
             
+            #Print total time spent
+            print(f"Trial {self.trial_number} took {time.time()-start_time:.3f} seconds.")
+            
             #Get the mean and median of the metrics, keras-tuner chooses either the mean or the median as instructed
             return get_mean_median_of_dicts(trial_metrics_dict)
         
@@ -241,6 +248,9 @@ class LastFUPHyperModel(keras_tuner.HyperModel):
     
     def fit(self, hp, model, x, y, class_weight=None, grid_search=False, metric_name = None, metric_mode=None, feature_set_dict=None, callbacks=None, **kwargs):
 
+        #Record the start time to calc total time
+        start_time = time.time()
+        
         #A dictionary that will store the validation metrics recorded for a given trial
         trial_metrics_dict = dict()
         
@@ -344,6 +354,9 @@ class LastFUPHyperModel(keras_tuner.HyperModel):
             #Increment the trial number
             self.trial_number += 1 
             
+            #Print total time spent
+            print(f"Trial {self.trial_number} took {time.time()-start_time:.3f} seconds.")
+            
             #Get the mean and median of the metrics, keras-tuner chooses either the mean of the median as instructed
             return get_mean_median_of_dicts(trial_metrics_dict)
         
@@ -440,7 +453,10 @@ class FUP_RNN_HyperModel(keras_tuner.HyperModel):
         return model
     
     def fit(self, hp, model, x, y, class_weight=None, grid_search=False, metric_name = None, metric_mode=None, feature_set_dict=None, callbacks=None, **kwargs):
-                    
+
+        #Record the start time to calc total time
+        start_time = time.time()
+                            
         #A dictionary that will store the validation metrics recorded for a given trial
         trial_metrics_dict = dict()
         
@@ -538,6 +554,9 @@ class FUP_RNN_HyperModel(keras_tuner.HyperModel):
                 
             #Increment the trial number
             self.trial_number += 1 
+            
+            #Print total time spent
+            print(f"Trial {self.trial_number} took {time.time()-start_time:.3f} seconds.")
             
             #Get the mean and median of the metrics, keras-tuner chooses either the mean of the median as instructed
             return get_mean_median_of_dicts(trial_metrics_dict)
@@ -699,6 +718,9 @@ class Baseline_FUP_Multiinput_HyperModel(keras_tuner.HyperModel):
     
     def fit(self, hp, model, x, y, class_weight=None, grid_search=False, metric_name = None, metric_mode=None, feature_set_dict=None, callbacks=None, **kwargs):
         
+        #Record the start time to calc total time
+        start_time = time.time()
+        
         def set_input_shape_of_model(model, baseline_train_X, fups_train_X):
             #Change the input shape according to the feature sets
             model_config = model.get_config().copy()
@@ -827,6 +849,9 @@ class Baseline_FUP_Multiinput_HyperModel(keras_tuner.HyperModel):
                 
             #Increment the trial number
             self.trial_number += 1 
+            
+            #Print total time spent
+            print(f"Trial {self.trial_number} took {time.time()-start_time:.3f} seconds.")
             
             #Get the mean and median of the metrics, keras-tuner chooses either the mean of the median as instructed
             return get_mean_median_of_dicts(trial_metrics_dict)
