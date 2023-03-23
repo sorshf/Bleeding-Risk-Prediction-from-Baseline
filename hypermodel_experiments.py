@@ -1,3 +1,11 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+# =============================================================================
+# Created By  : Soroush Shahryari Fard
+# =============================================================================
+"""The module contains the 4 train-test experiments (and the dummy classifiers experiments)."""
+# =============================================================================
+# Imports
 from hypermodels import LastFUPHyperModel, BaselineHyperModel, FUP_RNN_HyperModel, Baseline_FUP_Multiinput_HyperModel, dummy_classifiers
 from constants import instruction_dir
 import keras_tuner

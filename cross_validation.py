@@ -1,5 +1,11 @@
-import collections
-import math
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+# =============================================================================
+# Created By  : Soroush Shahryari Fard
+# =============================================================================
+"""The module contains all the functions used for cross validation and normalization."""
+# =============================================================================
+# Imports
 import random
 import copy
 import numpy as np
@@ -251,7 +257,7 @@ def kfold_cv(training_val_x_baseline,
         yield  (baseline_train_X, fups_train_X, train_y), (baseline_valid_X, fups_valid_X, valid_y)
         
 def get_timeseries_mean_std(X_train):
-    """Calculates the mean and std of a 3 Dimentional timeseries data of shape (sample, time, features).
+    """Calculates the mean and std of a 3 Dimentional timeseries data of shape (sample, timestamp, features).
 
     Args:
         X_train (list): list of lists containing the timeseries data.

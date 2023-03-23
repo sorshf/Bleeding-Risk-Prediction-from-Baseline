@@ -1,3 +1,11 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+# =============================================================================
+# Created By  : Soroush Shahryari Fard
+# =============================================================================
+"""The module contains the functions to read and prepare raw data."""
+# =============================================================================
+# Imports
 import pandas as pd
 import numpy as np
 from data_classes import Dataset
@@ -336,7 +344,7 @@ def correct_FUPPREDICTOR_discrepencies(data_dir, discrepency_dir):
     #The portion of discrepency correction sheet for FUPPREDICTOR
     FUPS_to_correct_FUPPREDICTOR = discrepency_data_correct_FUPS[discrepency_data_correct_FUPS["form"]=="FUPPREDICTOR"]
     #Use the discrepency correction sheet, to remove unwanted entries, or change their dates accordingly
-    for i, row in FUPS_to_correct_FUPPREDICTOR.iterrows():
+    for _, row in FUPS_to_correct_FUPPREDICTOR.iterrows():
         if row["process"] == "remove":
             df_FUPPREDICTOR.drop(df_FUPPREDICTOR[(df_FUPPREDICTOR["fudt"]==row["date"])&(df_FUPPREDICTOR["uniqid"]==row["uniqid"])].index, axis=0, inplace=True)
         else:
@@ -544,7 +552,6 @@ def prepare_BASELINE(data_dir, instruction_dir, discrepency_dir):
     #Clip values for some columns
     df_BASELINE['crbas'] = np.clip(df_BASELINE['crbas'], None, 225) #PWells says crbas >225 are correct, but I still clip them for ML models
     df_BASELINE['hemglbas'] = np.clip(df_BASELINE['hemglbas'], 75, None)
-    #df_result['inrbas'] = np.clip(df_result['inrbas'], None, 5)
     df_BASELINE['htbascm'] = np.clip(df_BASELINE['htbascm'], 125, 225)
 
     #Let's add a BMI column

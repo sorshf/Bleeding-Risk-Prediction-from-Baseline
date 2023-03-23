@@ -1,3 +1,11 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+# =============================================================================
+# Created By  : Soroush Shahryari Fard
+# =============================================================================
+"""This module contains all the constants such as path names used in the project."""
+# =============================================================================
+# Imports
 data_dir = "./Raw Data/data transferred Soroush with pwd.xlsx"
 instruction_dir = "./Raw Data/column_preprocessing_excel test_Mar13_2022.xlsx"
 discrepency_dir = "./Chantal_bleeding_revisions/2022-10-03  discrepencies_bleeding_data_Updated.xlsx"

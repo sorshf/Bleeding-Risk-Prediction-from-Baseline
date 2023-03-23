@@ -1,13 +1,21 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+# =============================================================================
+# Created By  : Soroush Shahryari Fard
+# =============================================================================
+"""The module contains the definitions of two custom classes Patient and Dataset."""
+# =============================================================================
+# Imports
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib import colors
 import seaborn as sns
-import matplotlib
 from constants import COLOR_dic, SYMBOL_dic, SIZE_dic, ALPHA_dic
 import datetime
 import time
-#matplotlib.use("Agg")
+#import matplotlib #uncomment this when running plot_all_data()
+#matplotlib.use("Agg") #uncomment this when running plot_all_data()
 
 
 class Patient():
@@ -647,7 +655,7 @@ class Dataset():
     def filter_patients_sequentially(self, mode):
         """Removes the patients without baseline. Then depending on the mode, it either:
         1- removes those w/o FUP and those whose FUP are after bleeding/discontinuation.
-        2- fill one FUP vector for patients w/o FUP and those whose FUP are after bleeding/discontinuation.
+        2- artificially fill in one FUP vector for patients w/o FUP and those whose FUP are after bleeding/discontinuation.
 
         Args:
             mode (String): The modes: 1- "remove_patients_W/O_FUP_or_Baseline_NO_filling"
@@ -699,11 +707,6 @@ class Dataset():
             self.all_patients = new_patients_list
             
             
-            # return {
-            #     "patients_without_baseline": patients_without_baseline,
-            #     "patients_without_FUP":patients_without_FUP,
-            #     "patients_with_no_events_before_bleeding":patients_with_no_events_before_bleeding
-            # }
         elif mode == "fill_patients_without_FUP":
             #Add FUP to the patients without FUP data
             patients_without_FUP = 0
@@ -807,70 +810,14 @@ class Dataset():
         
         for set_number, patients_set in enumerate(np.array_split(list(reversed(self.all_patients)), num_pages)):
             save_a_fig(patients_set, set_number)
-               
-    def create_FUPPREDICTOR_stats(self, path, mode="save"):
-        """Create a summary table on number of times a given patient has one in a FUPPREDICTOR feature.
+                         
+    def create_stats_for_baseline_nominal_features(self, path):
+        """Create a csv file in path showing the number of zeros and ones for each column of the baseline
+        dataset.
 
         Args:
-            mode (str, optional): 1-"save": will write to a csv 2-"return": will return a pandas df. Defaults to "save".
-
-        Returns:
-            pandas.df: The table of the stats.
+            path (string): String to the path where the file is being saved.
         """
-        
-        #Making sure the path has the forward slash
-        if path[-1] != "/":
-            path = path + "/"
-        
-        #Get the fups data
-        FUPS_dict, FUP_features,  _, _, _ = self.get_data_x_y()
-
-        #Divide the patients into bleeders and non-bleeders.
-        bleeders = []
-        non_bleeders = []
-
-        for patient in self.all_patients:
-            if patient.get_target() == 1:
-                bleeders.append(patient)
-            else:
-                non_bleeders.append(patient)
-                
-        bleeders_dic_FUPS = dict()
-        non_bleeders_dic_FUPS = dict()
-
-        #For each feature in FUPPREDICTOR, count number of patients where a given feature is one.
-        for feature in bleeders[0].FUPPREDICTOR.columns:
-            if pd.api.types.is_integer_dtype(patient.FUPPREDICTOR[feature]):
-                bleeders_dic_FUPS[feature] = 0
-                for patient in bleeders:
-                    if 1 in list(patient.FUPPREDICTOR[feature].values):
-                        bleeders_dic_FUPS[feature] += 1
-                
-                non_bleeders_dic_FUPS[feature] = 0
-                for patient in non_bleeders:
-                    if 1 in list(patient.FUPPREDICTOR[feature].values):
-                        non_bleeders_dic_FUPS[feature] += 1
-            else:
-                bleeders_dic_FUPS[feature] = pd.NA
-                non_bleeders_dic_FUPS[feature] = pd.NA
-                
-        counts_non_bleeders = pd.DataFrame.from_dict(non_bleeders_dic_FUPS, orient="index", columns=["non_bleeders_count"])
-        counts_non_bleeders["percent_non_bleeders"] = counts_non_bleeders["non_bleeders_count"].apply(lambda x:x/len(non_bleeders)*100)
-        counts_bleeders = pd.DataFrame.from_dict(bleeders_dic_FUPS, orient="index", columns=["bleeders_count"])
-        counts_bleeders["percent_bleeders"] = counts_bleeders["bleeders_count"].apply(lambda x:x/len(bleeders)*100)
-        counts_all = pd.concat([counts_bleeders, counts_non_bleeders], axis=1)
-        counts_all["bleeders_nonbleeders_ratio"] = counts_all.apply(lambda x: np.divide(x["percent_bleeders"],x["percent_non_bleeders"]), axis=1)
-
-        a = pd.DataFrame(np.concatenate(list(FUPS_dict.values())), columns=FUP_features)
-        counts_all["percent_nonzero_overall"] = [(len(a[a[col]>0])/len(a))*100 if col in a.columns else pd.NA for col in list(counts_all.index)]
-
-        if mode == "save":
-            counts_all.to_csv(f"{path}FUPS_stat.csv")
-        elif mode == "return":
-            return counts_all
-            
-    def create_stats_for_baseline_nominal_features(self, path):
-        #Create the stats for the baseline dataset
         all_baselines = []
 
         for patient in self.all_patients:
@@ -895,7 +842,7 @@ class Dataset():
                 
                 stats_dic[col] = data
 
-        pd.DataFrame.from_dict(stats_dic, orient="index").to_csv(path)
+        pd.DataFrame.from_dict(stats_dic, orient="index").to_csv(f"{path}/baseline_nominal_summary.csv")
         
     def add_FUP_since_baseline(self):
         for patient in self.all_patients:

@@ -1,3 +1,11 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+# =============================================================================
+# Created By  : Soroush Shahryari Fard
+# =============================================================================
+"""The module contains the 4 keras-tuner hypermodel class for tuning."""
+# =============================================================================
+# Imports
 import keras_tuner
 import tensorflow as tf
 from cross_validation import kfold_cv

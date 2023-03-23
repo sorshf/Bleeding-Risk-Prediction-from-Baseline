@@ -1,3 +1,11 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+# =============================================================================
+# Created By  : Soroush Shahryari Fard
+# =============================================================================
+"""The module contains the helper functions for the hypermodels defined in hypermodels.py"""
+# =============================================================================
+# Imports
 import tensorflow as tf
 import numpy as np
 import pandas as pd

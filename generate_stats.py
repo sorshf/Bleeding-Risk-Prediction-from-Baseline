@@ -1,3 +1,11 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+# =============================================================================
+# Created By  : Soroush Shahryari Fard
+# =============================================================================
+"""The module contains the functions to calculate summaries about the dataset."""
+# =============================================================================
+# Imports
 import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib import colors
