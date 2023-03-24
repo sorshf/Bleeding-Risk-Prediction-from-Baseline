@@ -35,7 +35,7 @@ def get_important_feature_dic_baseline(baseline_dataset, target_list):
     
     features_dict = dict()
     methods_list = [f_classif, mutual_info_classif]
-    numbers_list = [1, 5, 10, 15, 20, 30]
+    numbers_list = [1, 3, 5, 10, 15, 20]
 
     for method in methods_list:
         for number in numbers_list:
@@ -44,7 +44,7 @@ def get_important_feature_dic_baseline(baseline_dataset, target_list):
                                                                         method, 
                                                                         number)
 
-    features_dict["total"] = baseline_dataset.columns
+    #features_dict["total"] = baseline_dataset.columns
     
     return features_dict
 
@@ -84,7 +84,7 @@ def create_feature_set_dicts_baseline_and_FUP(baseline_dataframe, FUP_columns, t
 
         FUP_features_sets = dict()
 
-        FUP_features_sets["total"] = list(range(len(FUP_columns)))
+        FUP_features_sets["all_features"] = list(range(len(FUP_columns)))
 
         features_without_new_no_continue_yes = [feature for feature in FUP_columns if (feature.find("_Yes")==-1) & (feature.find("_No")==-1) & \
                                                 (feature.find("_Continue")==-1) & (feature.find("_New")==-1)]
@@ -165,7 +165,7 @@ def run_baseline_dense_experiment(model_name,
     tuner = keras_tuner.RandomSearch(
                     BaselineHyperModel(name = model_name),
                     objective=keras_tuner.Objective(f"{metric_cv_calc_mode}_val_{metric_name}", metric_mode),
-                    max_trials=10,
+                    max_trials=10000,
                     seed=1375,
                     overwrite = overwrite,
                     directory=directory_name,
@@ -312,7 +312,7 @@ def run_lastFUP_dense_experiment(model_name,
     tuner = keras_tuner.RandomSearch(
                     LastFUPHyperModel(name = model_name),
                     objective=keras_tuner.Objective(f"{metric_cv_calc_mode}_val_{metric_name}", metric_mode),
-                    max_trials=10,
+                    max_trials=10000,
                     seed=1375,
                     overwrite = overwrite,
                     directory=directory_name,
@@ -457,7 +457,7 @@ def run_FUP_RNN_experiment(model_name,
     tuner = keras_tuner.RandomSearch(
                     FUP_RNN_HyperModel(name = model_name),
                     objective=keras_tuner.Objective(f"{metric_cv_calc_mode}_val_{metric_name}", metric_mode),
-                    max_trials=10,
+                    max_trials=10000,
                     seed=1375,
                     overwrite = overwrite,
                     directory=directory_name,
@@ -601,7 +601,7 @@ def run_Baseline_FUP_multiinput_experiment(model_name,
     tuner = keras_tuner.RandomSearch(
                     Baseline_FUP_Multiinput_HyperModel(name = model_name),
                     objective=keras_tuner.Objective(f"{metric_cv_calc_mode}_val_{metric_name}", metric_mode),
-                    max_trials=10,
+                    max_trials=10000,
                     seed=1375,
                     overwrite = overwrite,
                     directory=directory_name,

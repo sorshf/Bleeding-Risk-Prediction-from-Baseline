@@ -32,6 +32,9 @@ class BaselineHyperModel(keras_tuner.HyperModel):
         
     def build(self, hp):
         
+        #Free up some RAM
+        tf.keras.backend.clear_session()
+        
         #A sequential model
         model = tf.keras.Sequential()
         
@@ -39,13 +42,13 @@ class BaselineHyperModel(keras_tuner.HyperModel):
         num_layers = hp.Int("num_dense_hidden_layers", 1, 3)
         
         #Number of nodes in the hidden layer(s)
-        num_nodes = hp.Choice(f"hidden_layer_units", [1, 5, 10, 15, 20, 30, 40, 50, 100])
+        num_nodes = hp.Choice(f"hidden_layer_units", [1, 5, 10, 15, 20, 30, 40])
         
         #The choice of regularizer for the layer
-        regularizer = hp.Choice(f'regularizer', ["None", "l1_0.01", "l2_0.01", "l1_l2_0.01"])
+        regularizer = hp.Choice(f'regularizer', ["None", "l2_0.01", "l1_l2_0.01"])
         
         #Dropout layer's rate
-        dropout_rate = hp.Choice(f'dropout_rate', [0.10, 0.25, 0.50])
+        dropout_rate = hp.Choice(f'dropout_rate', [0.25, 0.50])
         
         #Creating the model
         for i in range(num_layers):
@@ -83,7 +86,7 @@ class BaselineHyperModel(keras_tuner.HyperModel):
         baseline_train_val_X = baseline_train_val_X.iloc[:,features_index_to_keep_baseline]
                 
         #The choice of optimizer
-        optimizer = hp.Choice("optimizer", ["Adam", "RMSProp"])
+        optimizer = hp.Choice("optimizer", ["Adam"])
         learning_rate = hp.Float("lr", min_value=1e-4, max_value=1e-2, sampling="log")
             
         #Save the model config so that we can reset the model for each iterations/fold
@@ -220,6 +223,9 @@ class LastFUPHyperModel(keras_tuner.HyperModel):
         
     def build(self, hp):
         
+        #Free up RAM
+        tf.keras.backend.clear_session()
+
         #A sequential model
         model = tf.keras.Sequential()
         
@@ -230,10 +236,10 @@ class LastFUPHyperModel(keras_tuner.HyperModel):
         num_nodes = hp.Choice(f"hidden_layer_units", [12, 15, 20, 30, 40, 50, 90])
         
         #The choice of regularizer for the layer
-        regularizer = hp.Choice(f'regularizer', ["None", "l1_0.01", "l2_0.01", "l1_l2_0.01"])
+        regularizer = hp.Choice(f'regularizer', ["None", "l2_0.01", "l1_l2_0.01"])
         
         #Dropout layer's rate
-        dropout_rate = hp.Choice(f'dropout_rate', [0.10, 0.25, 0.50])
+        dropout_rate = hp.Choice(f'dropout_rate', [0.25, 0.50])
         
         #Creating the model
         for i in range(num_layers):
@@ -270,7 +276,7 @@ class LastFUPHyperModel(keras_tuner.HyperModel):
         features_index_to_keep_fups = feature_set_dict["FUPS_feature_sets"][fups_feature_choice]
         
         #The choice of optimizer and learning rate
-        optimizer = hp.Choice("optimizer", ["Adam", "RMSProp"])
+        optimizer = hp.Choice("optimizer", ["Adam"])
         learning_rate = hp.Float("lr", min_value=1e-4, max_value=1e-2, sampling="log")
         
         #Save the model config so that we can reset the model for each iterations/fold
@@ -421,6 +427,9 @@ class FUP_RNN_HyperModel(keras_tuner.HyperModel):
         
     def build(self, hp):
         
+        #Free up some RAM
+        tf.keras.backend.clear_session()
+        
         #A sequential model
         model = tf.keras.Sequential()
         
@@ -434,7 +443,7 @@ class FUP_RNN_HyperModel(keras_tuner.HyperModel):
         num_nodes = hp.Choice(f"LSTM_layer_units", [12, 15, 20, 30, 40, 50, 90])
         
         #The choice of regularizer for the layer
-        regularizer = hp.Choice(f'regularizer', ["None", "l1_0.01", "l2_0.01", "l1_l2_0.01"])
+        regularizer = hp.Choice(f'regularizer', ["None", "l2_0.01", "l1_l2_0.01"])
         
         #Dropout layer's rate
         recurrent_dropout_rate = hp.Choice(f'recurrent_dropout_rate', [0.10, 0.25, 0.50])
@@ -453,7 +462,7 @@ class FUP_RNN_HyperModel(keras_tuner.HyperModel):
                 )
                 
         #Adding the final dropout layer
-        model.add(tf.keras.layers.Dropout(rate=hp.Choice('final_dropout_rate', [0.1, 0.25, 0.50]), name="final_dropout_layer"))
+        model.add(tf.keras.layers.Dropout(rate=hp.Choice('final_dropout_rate', [0.25, 0.50]), name="final_dropout_layer"))
             
         #Add the final output_layer to the model
         model.add(tf.keras.layers.Dense(1, activation="sigmoid", name="output_sigmoid"))
@@ -476,7 +485,7 @@ class FUP_RNN_HyperModel(keras_tuner.HyperModel):
         features_index_to_keep_fups = feature_set_dict["FUPS_feature_sets"][fups_feature_choice]
         
         #The choice of optimizer and learning rate
-        optimizer = hp.Choice("optimizer", ["Adam", "RMSProp"])
+        optimizer = hp.Choice("optimizer", ["Adam"])
         learning_rate = hp.Float("lr", min_value=1e-4, max_value=1e-2, sampling="log")
         
         #Save the model config so that we can reset the model for each iterations/fold
@@ -618,6 +627,10 @@ class Baseline_FUP_Multiinput_HyperModel(keras_tuner.HyperModel):
         self.unique_code = str(datetime.now().strftime("%D__%T").replace("/", "_").replace(":", "_"))
         
     def build(self, hp):
+        
+        #Free up RAM
+        tf.keras.backend.clear_session()
+
         
         #############################
         #Baseline dataset fully connected network
