@@ -9,6 +9,7 @@
 import tensorflow as tf
 import numpy as np
 import pandas as pd
+import os
 
 
 #Choose a weight regularization (l1 and l2)
@@ -132,7 +133,7 @@ def get_last_FUPs_array(fups_X, timeseries_padding_value):
     return np.array(final_FUP_array)
 
 #Record history metrics for the cross-validation        
-def record_history_values(hypermodel, model, history_dict, metric_name, mode, fold_num, cv_results_dict, trial_metrics_dict, repeat_value):
+def record_history_values(hypermodel, model, history_dict, metric_name, mode, fold_num, trial_metrics_dict, repeat_value):
     """Record the history metric of a given fold for a given trial (based on the metric_name and mode)
         in the cv_results_dict.
 
@@ -143,7 +144,6 @@ def record_history_values(hypermodel, model, history_dict, metric_name, mode, fo
         metric_name (string): The name of the metric (ex: recall, precision, auc, etc.) that needs to be optimized.
         mode (string): Whether to choose the best hyperparameter as the max or min of metric.
         fold_num (int): The fold number for the given metric dic.
-        cv_results_dict (dict): The cv results dict that stores all the metrics for all the folds and trials. 
         trial_metrics_dict (dict): The trial metric dic for a given trial.
     """
     
@@ -162,10 +162,49 @@ def record_history_values(hypermodel, model, history_dict, metric_name, mode, fo
     fold_metric_copy = fold_metric.copy()
                 
     #Record the result of fold-cv in a dictionary provided to the hypermodel.fit for debugging/graphing
-    fold_metric_copy["final_bias"] = model.get_config()["layers"][-1]["config"]["bias_initializer"]["config"]["values"]
+    fold_metric_copy["final_bias"] = model.get_config()["layers"][-1]["config"]["bias_initializer"]["config"]["value"]
     fold_metric_copy["best_epoch"] = index + 1
-    cv_results_dict[f"trial_{hypermodel.trial_number}_repeat{repeat_value}_fold_{fold_num}"] = fold_metric_copy
     
-    #Record the results in case there was a problem
-    pd.DataFrame.from_dict(cv_results_dict, orient='index').to_csv(f"./keras_tuner_results/{hypermodel.name}/{hypermodel.name}_{hypermodel.unique_code}.csv")
+    #Check if the text results exists otherwise make it
+    if os.path.isfile(f"./keras_tuner_results/{hypermodel.name}/{hypermodel.name}_grid_search_results.csv"):
+        with open(f"./keras_tuner_results/{hypermodel.name}/{hypermodel.name}_grid_search_results.csv", "a", encoding="utf-8") as file:
+            file.write(",".join([f"trial_{hypermodel.trial_number}_repeat{repeat_value}_fold_{fold_num}", *[str(val) for val in fold_metric_copy.values()]]))
+            file.write("\n")
+    else:
+        with open(f"./keras_tuner_results/{hypermodel.name}/{hypermodel.name}_grid_search_results.csv", "w", encoding="utf-8") as file:
+            file.write(",".join(["trial_number", *fold_metric_copy.keys()]))
+            file.write("\n")
+            file.write(",".join([f"trial_{hypermodel.trial_number}_repeat{repeat_value}_fold_{fold_num}", *[str(val) for val in fold_metric_copy.values()]]))
+            file.write("\n")
+             
 
+def get_hypermodel_trial_number(model_name):
+    """Retrieves the trial number of a given hypermodel. If the model is already ran, it finds out which Trial it is on. 
+    Otherwise, it returns 0 which indicates that the model hasn't been ran yet. Also, rectifies the grid_search_csv for the model.
+    Note: keras_tuner_results/ must exist in the current directory.
+
+    Args:
+        model_name (string): "Baseline_Dense", "LastFUP_Dense", "FUP_RNN", "FUP_Baseline_Multiinput"
+
+    Returns:
+        int: The trial number.
+    """
+    if os.path.isdir(f"./keras_tuner_results/{model_name}/{model_name}"):
+        final_trial_num = max([int(name.split("_")[1]) for name in os.listdir(f"./keras_tuner_results/{model_name}/{model_name}") if "trial" in name])
+        final_trial_name = [name for name in os.listdir(f"./keras_tuner_results/{model_name}/{model_name}") if str(final_trial_num) in name][0]
+        json_file = open(f"./keras_tuner_results/{model_name}/{model_name}/{final_trial_name}/trial.json", "r", encoding="utf-8")
+        json_file_txt = "".join(json_file.readlines())
+        json_file.close()
+        if "RUNNING" in json_file_txt:
+            #Removing the final trial info in the grid search csv, because keras-tuner will redo it again.
+            data = pd.read_csv(f"./keras_tuner_results/{model_name}/{model_name}_grid_search_results.csv")
+            data["trial_num"] = data.apply(lambda x:int(x["trial_number"].split("_")[1]), axis=1 )
+            data = data[data["trial_num"]!=final_trial_num].drop("trial_num",axis=1)
+            data.to_csv(f"./keras_tuner_results/{model_name}/{model_name}_grid_search_results.csv", index=False) 
+            
+            return final_trial_num
+        else:
+            return final_trial_num+1
+    
+    else:
+        return 0

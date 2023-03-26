@@ -25,8 +25,7 @@ class BaselineHyperModel(keras_tuner.HyperModel):
     
     def __init__(self, name):
         super().__init__()
-        self.trial_number = 0 #Recording the number of trial
-        self.cv_results_dict = dict() #Dict of cross-validation results.
+        self.trial_number = get_hypermodel_trial_number(name)
         self.name = name #A name for this hypermodel
         self.unique_code = str(datetime.now().strftime("%D__%T").replace("/", "_").replace(":", "_"))
         
@@ -162,7 +161,6 @@ class BaselineHyperModel(keras_tuner.HyperModel):
                                     metric_name=f"val_{metric_name}",
                                     mode = metric_mode,
                                     fold_num = fold_num+1,
-                                    cv_results_dict = self.cv_results_dict,
                                     trial_metrics_dict=trial_metrics_dict,
                                     repeat_value=repeat)
                     
@@ -216,8 +214,7 @@ class LastFUPHyperModel(keras_tuner.HyperModel):
     
     def __init__(self, name):
         super().__init__()
-        self.trial_number = 0 #Recording the number of trial
-        self.cv_results_dict = dict() #Dict of cross-validation results.
+        self.trial_number = get_hypermodel_trial_number(name)
         self.name = name #A name for this hypermodel
         self.unique_code = str(datetime.now().strftime("%D__%T").replace("/", "_").replace(":", "_"))
         
@@ -360,7 +357,6 @@ class LastFUPHyperModel(keras_tuner.HyperModel):
                                     metric_name=f"val_{metric_name}",
                                     mode = metric_mode,
                                     fold_num = fold_num+1,
-                                    cv_results_dict = self.cv_results_dict,
                                     trial_metrics_dict=trial_metrics_dict,
                                     repeat_value=repeat)
                     
@@ -420,8 +416,7 @@ class FUP_RNN_HyperModel(keras_tuner.HyperModel):
     
     def __init__(self, name):
         super().__init__()
-        self.trial_number = 0 #Recording the number of trial
-        self.cv_results_dict = dict() #Dict of cross-validation results.
+        self.trial_number = get_hypermodel_trial_number(name)
         self.name = name #A name for this hypermodel
         self.unique_code = str(datetime.now().strftime("%D__%T").replace("/", "_").replace(":", "_"))
         
@@ -564,7 +559,6 @@ class FUP_RNN_HyperModel(keras_tuner.HyperModel):
                                     metric_name=f"val_{metric_name}",
                                     mode = metric_mode,
                                     fold_num = fold_num+1,
-                                    cv_results_dict = self.cv_results_dict,
                                     trial_metrics_dict=trial_metrics_dict,
                                     repeat_value=repeat)
                     
@@ -621,8 +615,7 @@ class Baseline_FUP_Multiinput_HyperModel(keras_tuner.HyperModel):
     
     def __init__(self, name):
         super().__init__()
-        self.trial_number = 0 #Recording the number of trial
-        self.cv_results_dict = dict() #Dict of cross-validation results.
+        self.trial_number = get_hypermodel_trial_number(name)
         self.name = name #A name for this hypermodel
         self.unique_code = str(datetime.now().strftime("%D__%T").replace("/", "_").replace(":", "_"))
         
@@ -863,7 +856,6 @@ class Baseline_FUP_Multiinput_HyperModel(keras_tuner.HyperModel):
                                     metric_name=f"val_{metric_name}",
                                     mode = metric_mode,
                                     fold_num = fold_num+1,
-                                    cv_results_dict = self.cv_results_dict,
                                     trial_metrics_dict=trial_metrics_dict,
                                     repeat_value=repeat)
                     

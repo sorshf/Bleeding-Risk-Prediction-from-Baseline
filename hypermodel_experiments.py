@@ -756,7 +756,7 @@ def get_best_number_of_training_epochs(tuner, metric_name, metric_mode, metric_c
     """
     
     #Access the results pandas dataframe obtained when tunning
-    cv_dic = pd.DataFrame.from_dict(tuner.hypermodel.cv_results_dict, orient='index')
+    cv_dic = pd.read_csv(f"./keras_tuner_results/{tuner.hypermodel.name}/{tuner.hypermodel.name}_grid_search_results.csv", index_col="trial_number")
     
     #set of all the trial numbers
     trial_nums = list(set([int(entry.split("_")[1]) for entry in cv_dic.index]))

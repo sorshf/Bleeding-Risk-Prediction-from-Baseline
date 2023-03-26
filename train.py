@@ -50,7 +50,7 @@ def main(experiment_name):
                                     target_series = target_series,
                                     list_FUP_cols = list_FUP_cols,
                                     patient_dataset = patient_dataset,
-                                    overwrite=True
+                                    overwrite=False
                                     )
         
     elif experiment_name == "Baseline_Dense":
@@ -66,7 +66,7 @@ def main(experiment_name):
                                     target_series = target_series,
                                     list_FUP_cols = list_FUP_cols,
                                     patient_dataset = None,
-                                    overwrite=True
+                                    overwrite=False
                                     )
 
     elif experiment_name == "FUP_RNN":
@@ -82,7 +82,7 @@ def main(experiment_name):
                                     target_series = target_series,
                                     list_FUP_cols = list_FUP_cols,
                                     patient_dataset = patient_dataset,
-                                    overwrite=True)
+                                    overwrite=False)
         
         
     elif experiment_name == "FUP_Baseline_Multiinput":
@@ -98,7 +98,7 @@ def main(experiment_name):
                                     target_series = target_series,
                                     list_FUP_cols = list_FUP_cols,
                                     patient_dataset = patient_dataset,
-                                    overwrite=True)
+                                    overwrite=False)
         
     elif experiment_name == "Dummy_classifiers":
         print(f"Performing {experiment_name} experiment. \n")
