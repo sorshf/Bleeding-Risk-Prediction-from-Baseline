@@ -86,7 +86,7 @@ class BaselineHyperModel(keras_tuner.HyperModel):
                 
         #The choice of optimizer
         optimizer = hp.Choice("optimizer", ["Adam"])
-        learning_rate = hp.Float("lr", min_value=1e-4, max_value=1e-2, sampling="log")
+        learning_rate = hp.Choice("lr", [0.001, 0.0003, 0.0005])
             
         #Save the model config so that we can reset the model for each iterations/fold
         model_config = model.get_config()
@@ -274,7 +274,7 @@ class LastFUPHyperModel(keras_tuner.HyperModel):
         
         #The choice of optimizer and learning rate
         optimizer = hp.Choice("optimizer", ["Adam"])
-        learning_rate = hp.Float("lr", min_value=1e-4, max_value=1e-2, sampling="log")
+        learning_rate = hp.Choice("lr", [0.001, 0.0003, 0.0005])
         
         #Save the model config so that we can reset the model for each iterations/fold
         model_config = model.get_config()
@@ -481,7 +481,7 @@ class FUP_RNN_HyperModel(keras_tuner.HyperModel):
         
         #The choice of optimizer and learning rate
         optimizer = hp.Choice("optimizer", ["Adam"])
-        learning_rate = hp.Float("lr", min_value=1e-4, max_value=1e-2, sampling="log")
+        learning_rate = hp.Choice("lr", [0.001, 0.0003, 0.0005])
         
         #Save the model config so that we can reset the model for each iterations/fold
         model_config = model.get_config()
@@ -767,7 +767,7 @@ class Baseline_FUP_Multiinput_HyperModel(keras_tuner.HyperModel):
                 
         #The choice of optimizer and learning rate
         optimizer = hp.Choice("optimizer", ["Adam", "RMSProp"])
-        learning_rate = hp.Float("lr", min_value=1e-4, max_value=1e-2, sampling="log")
+        learning_rate = hp.Choice("lr", [0.001, 0.0003, 0.0005])
         
         #Save the model config so that we can reset the model for each iterations/fold
         model_config = model.get_config()
