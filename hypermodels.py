@@ -632,16 +632,16 @@ class Baseline_FUP_Multiinput_HyperModel(keras_tuner.HyperModel):
         input_baseline = tf.keras.layers.Input(shape=(1000,), dtype="float32", name="baseline_input")
 
         #Number of dense hidden layers in baseline
-        num_dense_layers_baseline = hp.Int("num_dense_hidden_layers_baseline", 1, 3)
+        num_dense_layers_baseline = hp.Int("num_dense_hidden_layers_baseline", 2, 2)
         
         #Number of nodes in the hidden layer(s)
-        num_nodes_hidden_baseline = hp.Choice(f"hidden_layer_units_baseline", [1, 5, 10, 15, 20, 30, 40, 50, 100])
+        num_nodes_hidden_baseline = hp.Choice(f"hidden_layer_units_baseline", [20, 30, 40])
         
         #The choice of regularizer for the layer
-        regularizer_hidden_baseline = hp.Choice(f'regularizer_hidden_baseline', ["None", "l1_0.01", "l2_0.01", "l1_l2_0.01"])
+        regularizer_hidden_baseline_RNN = hp.Choice(f'regularizer_hidden_baseline_RNN', ["None", "l2_0.01", "l1_l2_0.01"])
         
         #Dropout layer's rate
-        dropout_rate_hidden_baseline = hp.Choice(f'dropout_rate_hidden_baseline', [0.10, 0.25, 0.50])
+        dropout_rate_hidden_baseline = hp.Choice(f'dropout_rate_hidden_baseline', [0.25, 0.50])
         
         #Adding 2 to 5 hidden layers where each layer has 5 - 40 nodes (this is for grid search with keras-tuner)
         for i in range(num_dense_layers_baseline):
@@ -651,7 +651,7 @@ class Baseline_FUP_Multiinput_HyperModel(keras_tuner.HyperModel):
                     units=num_nodes_hidden_baseline,
                     name= f"Baseline_Dense_{i}",
                     activation = 'relu',
-                    kernel_regularizer = get_regulizer_object(regularizer_hidden_baseline)
+                    kernel_regularizer = get_regulizer_object(regularizer_hidden_baseline_RNN)
                 )
                 
                 if i == 0:
@@ -672,13 +672,13 @@ class Baseline_FUP_Multiinput_HyperModel(keras_tuner.HyperModel):
         mask = tf.keras.layers.Masking(mask_value=timeseries_padding_value)(fup_input)
         
         #Number of RNN layer
-        num_layers_LSTM_fup = hp.Int("num_layers_LSTM_fup", 1, 2)
+        num_layers_LSTM_fup = hp.Int("num_layers_LSTM_fup", 1, 1)
         
         #Number of nodes in the hidden layer(s)
-        num_nodes_LSTM_FUP = hp.Choice("LSTM_layer_units", [12, 15, 20, 30, 40, 50, 90])
+        num_nodes_LSTM_FUP = hp.Choice("LSTM_layer_units", [90])
         
         #The choice of regularizer for the layer
-        regularizer_LSTM_FUP = hp.Choice('regularizer_LSTM_FUP', ["None", "l1_0.01", "l2_0.01", "l1_l2_0.01"])
+        #regularizer_LSTM_FUP = hp.Choice('regularizer_LSTM_FUP', ["None", "l1_0.01", "l2_0.01", "l1_l2_0.01"])
         
         #Dropout layer's rate
         recurrent_dropout_rate = hp.Choice('recurrent_dropout_rate_LSTM', [0.10, 0.25, 0.50])
@@ -692,7 +692,7 @@ class Baseline_FUP_Multiinput_HyperModel(keras_tuner.HyperModel):
                         recurrent_dropout = recurrent_dropout_rate,
                         activation = 'tanh',
                         return_sequences = (num_layers_LSTM_fup > 1) & (i != num_layers_LSTM_fup-1), #If more than one layer, return sequence
-                        kernel_regularizer = get_regulizer_object(regularizer_LSTM_FUP)
+                        kernel_regularizer = get_regulizer_object(regularizer_hidden_baseline_RNN)
                     )
                 
                 if i == 0:
@@ -710,7 +710,7 @@ class Baseline_FUP_Multiinput_HyperModel(keras_tuner.HyperModel):
         num_final_nodes = (num_nodes_hidden_baseline+num_nodes_LSTM_FUP)//2
         
         #Final dropout rate
-        final_dropout_rate = hp.Choice('final_dropout_rate', [0.1, 0.25])
+        final_dropout_rate = hp.Choice('final_dropout_rate', [0.25, 0.50])
         
         
         dense = tf.keras.layers.Dense(
@@ -766,7 +766,7 @@ class Baseline_FUP_Multiinput_HyperModel(keras_tuner.HyperModel):
         
                 
         #The choice of optimizer and learning rate
-        optimizer = hp.Choice("optimizer", ["Adam", "RMSProp"])
+        optimizer = hp.Choice("optimizer", ["Adam"])
         learning_rate = hp.Choice("lr", [0.001, 0.0003, 0.0005])
         
         #Save the model config so that we can reset the model for each iterations/fold

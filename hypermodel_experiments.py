@@ -457,7 +457,7 @@ def run_FUP_RNN_experiment(model_name,
     tuner = keras_tuner.RandomSearch(
                     FUP_RNN_HyperModel(name = model_name),
                     objective=keras_tuner.Objective(f"{metric_cv_calc_mode}_val_{metric_name}", metric_mode),
-                    max_trials=10000,
+                    max_trials=912,
                     seed=1375,
                     overwrite = overwrite,
                     directory=directory_name,
@@ -596,12 +596,16 @@ def run_Baseline_FUP_multiinput_experiment(model_name,
     patient_dataset_train_val.all_patients = [patient for patient in patient_dataset_train_val.all_patients if patient.uniqid in training_val_indeces]
     feature_selection_dict = create_feature_set_dicts_baseline_and_FUP(baseline_train_val_X, list_FUP_cols, train_val_y, patient_dataset_train_val, mode="Both FUP and Baseline")
     
+    feature_selection_dict = {"baseline_feature_sets":{'15_f_classif':feature_selection_dict["baseline_feature_sets"]['15_f_classif'],
+                                                            '20_f_classif':feature_selection_dict["baseline_feature_sets"]['20_f_classif']}, 
+                                    "FUPS_feature_sets":{'all_features':feature_selection_dict["FUPS_feature_sets"]['all_features']}}
+
     
     #Define the tuner
     tuner = keras_tuner.RandomSearch(
                     Baseline_FUP_Multiinput_HyperModel(name = model_name),
                     objective=keras_tuner.Objective(f"{metric_cv_calc_mode}_val_{metric_name}", metric_mode),
-                    max_trials=10000,
+                    max_trials=700,
                     seed=1375,
                     overwrite = overwrite,
                     directory=directory_name,
@@ -613,7 +617,7 @@ def run_Baseline_FUP_multiinput_experiment(model_name,
                 y = train_val_y,
                 batch_size = 16,
                 grid_search = True,
-                epochs = 50,
+                epochs = 100,
                 metric_name = metric_name,
                 metric_mode = metric_mode,
                 verbose = 0,
