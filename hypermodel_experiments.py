@@ -744,6 +744,132 @@ def run_dummy_experiment(model_name,
                       y_test=test_y,
                       FUPS_dict = FUPS_dict)
     
+def run_ensemble_experiment(model_name, 
+                            directory_name, 
+                            baseline_dataframe,
+                            FUPS_dict,
+                            target_series,
+                            list_FUP_cols,
+                            patient_dataset):
+    
+    """Performs hyperparamter search, save the best model, and then test on the testing set for the lastFUP_dense experiment.
+
+    Args:
+        model_name (string): The name of the hypermodel (could be anything).
+        directory_name (string): The name of the directory to save the models info.
+        baseline_dataframe (pandas.DataFrame): The Baseline dataset.
+        FUPS_dict (dict): The dictionary of FUP data. Keys are the ids, and values are 2D array of (timeline, features).
+        target_series (pandas.Series): Pandas Series of all the patients labels.
+        list_FUP_cols (list): The list of the feature names (in order) for the FUP columns.
+        patient_dataset (Dataset): All patient datset object (this is only used for FUP feature selection).        
+    """
+    
+    #Create a dir to save the result of experiment
+    if not os.path.exists(f"./keras_tuner_results/{model_name}"):
+        os.makedirs(f"./keras_tuner_results/{model_name}")
+        
+    #Divide all the data into training and testing portions (two stratified parts) where the testing part consists 30% of the data
+    #Note, the training_val and testing portions are generated deterministically.
+    training_val_indeces, testing_indeces = divide_into_stratified_fractions(FUPS_dict, target_series.copy(), fraction=0.3)
+
+    #Record the training and testing indeces
+    record_training_testing_indeces(model_name, training_val_indeces, testing_indeces)
+
+    #Using the indeces for training_val, extract the training-val data from all the data in both BASELINE and follow-ups
+    #train_val data are used for hyperparameter optimization and training.
+    baseline_train_val_X, fups_train_val_X, train_val_y = get_X_y_from_indeces(indeces = training_val_indeces, 
+                                                                            baseline_data = baseline_dataframe, 
+                                                                            FUPS_data_dic = FUPS_dict, 
+                                                                            all_targets_data = target_series)
+
+    #Create the feature selection dic (with different methods) for hyperparamter tuning
+    patient_dataset_train_val = copy.deepcopy(patient_dataset)    #Keep only the train_val data for feature selection of the FUP data
+    patient_dataset_train_val.all_patients = [patient for patient in patient_dataset_train_val.all_patients if patient.uniqid in training_val_indeces]
+    feature_selection_dict = create_feature_set_dicts_baseline_and_FUP(baseline_train_val_X, list_FUP_cols, train_val_y, patient_dataset_train_val, mode="Both FUP and Baseline")
+
+
+
+    #Standardize the training data, and the test data.
+    norm_train_val_data , norm_test_data = normalize_training_validation(training_indeces = training_val_indeces, 
+                                                                        validation_indeces = testing_indeces, 
+                                                                        baseline_data = baseline_dataframe, 
+                                                                        FUPS_data_dict = FUPS_dict, 
+                                                                        all_targets_data = target_series, 
+                                                                        timeseries_padding_value=timeseries_padding_value)
+
+    #unwrap the training-val and testing variables
+    norm_train_val_baseline_X, norm_train_val_fups_X, train_val_y = norm_train_val_data
+    norm_test_baseline_X, norm_test_fups_X, test_y = norm_test_data  
+    
+    #Read the best hyperparameters for the baseline and fup_rnn models
+    Baseline_Dense_hp = pd.read_csv("./keras_tuner_results/Baseline_Dense/Baseline_Dense_best_hp.csv", index_col=0)
+    Baseline_Dense_hp = {i[0]:i[1].values[0] for i in Baseline_Dense_hp.iterrows()}
+    FUP_RNN_hp = pd.read_csv("./keras_tuner_results/FUP_RNN/FUP_RNN_best_hp.csv", index_col=0)
+    FUP_RNN_hp = {i[0]:i[1].values[0] for i in FUP_RNN_hp.iterrows()}
+
+    #"baseline_feature_sets" and "FUPS_feature_sets"
+    #The choice of the feature set to use for the baseline dataset
+    baseline_feature_choice = Baseline_Dense_hp["baseline_feature_set"]
+    features_index_to_keep_baseline = feature_selection_dict["baseline_feature_sets"][baseline_feature_choice]
+    norm_test_baseline_X = norm_test_baseline_X.iloc[:,features_index_to_keep_baseline]
+    norm_train_val_baseline_X = norm_train_val_baseline_X.iloc[:,features_index_to_keep_baseline]
+
+
+    #The choice of the feature set to use for FUP data
+    fups_feature_choice = FUP_RNN_hp["FUPS_feature_set"]
+    features_index_to_keep_fups = feature_selection_dict["FUPS_feature_sets"][fups_feature_choice]
+    norm_test_fups_X = norm_test_fups_X[:,:,features_index_to_keep_fups]
+    norm_train_val_fups_X = norm_train_val_fups_X[:,:,features_index_to_keep_fups]
+
+    print(f"Using the baseline feature set {baseline_feature_choice} and FUP feature set {fups_feature_choice} for testing.")
+    
+    #Load the saved model of the baseline_Dense and FUP RNN
+    model_Baseline_Dense = tf.keras.models.load_model("./keras_tuner_results/Baseline_Dense/Baseline_Dense.h5")
+    model_Baseline_Dense._name = "Baseline_Dense"
+    model_FUP_RNN = tf.keras.models.load_model("./keras_tuner_results/FUP_RNN/FUP_RNN.h5")
+    model_FUP_RNN._name = "FUP_RNN"
+    
+    #Create the ensemble model
+    input_baseline = tf.keras.layers.Input(shape=(norm_test_baseline_X.shape[-1],), dtype="float32", name="baseline_input")
+    fup_input = tf.keras.layers.Input(shape=(None,norm_test_fups_X.shape[-1]), dtype="float32", name="fup_input")
+
+    baseline_prediction = model_Baseline_Dense(input_baseline)
+    FUP_prediction = model_FUP_RNN(fup_input)
+
+    multi_output = tf.keras.layers.average([baseline_prediction, FUP_prediction])
+
+    ensemble_model = tf.keras.Model(inputs=[input_baseline, fup_input], outputs=multi_output)
+    
+    ensemble_model.compile(
+            optimizer = "ADAM",
+            loss = "binary_crossentropy",
+            metrics = [
+                        tf.keras.metrics.TruePositives(name='tp'),
+                        tf.keras.metrics.FalsePositives(name='fp'),
+                        tf.keras.metrics.TrueNegatives(name='tn'),
+                        tf.keras.metrics.FalseNegatives(name='fn'), 
+                        tf.keras.metrics.BinaryAccuracy(name='accuracy'),
+                        tf.keras.metrics.Precision(name='precision'),
+                        tf.keras.metrics.Recall(name='recall'),
+                        tf.keras.metrics.AUC(name='auc'),
+                        tf.keras.metrics.AUC(name='prc', curve='PR') # precision-recall curve
+                        ],
+                    )
+    
+    
+    #Test on the testing set
+    test_res = ensemble_model.evaluate([norm_test_baseline_X, norm_test_fups_X], test_y)
+    pd.DataFrame.from_dict({metric:value for metric, value in zip(ensemble_model.metrics_names, test_res)}, orient="index", columns=["test"]).to_csv(f"{directory_name}/{model_name}_test_result.csv")
+
+    save_metrics_and_ROC_PR(model_name=model_name, 
+                            model=ensemble_model, 
+                            training_x=[norm_train_val_baseline_X, norm_train_val_fups_X], 
+                            training_y=train_val_y, 
+                            testing_x = [norm_test_baseline_X, norm_test_fups_X], 
+                            testing_y = test_y,
+                            FUPS_dict = FUPS_dict)
+    
+    
     
 
 def get_best_number_of_training_epochs(tuner, metric_name, metric_mode, metric_cv_calc_mode):

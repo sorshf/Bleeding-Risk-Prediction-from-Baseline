@@ -15,7 +15,7 @@ Usage:
 # Imports
 from data_preparation import prepare_patient_dataset
 from constants import data_dir, instruction_dir, discrepency_dir
-from hypermodel_experiments import run_lastFUP_dense_experiment, run_baseline_dense_experiment, run_FUP_RNN_experiment, run_Baseline_FUP_multiinput_experiment, run_dummy_experiment
+from hypermodel_experiments import run_lastFUP_dense_experiment, run_baseline_dense_experiment, run_FUP_RNN_experiment, run_Baseline_FUP_multiinput_experiment, run_dummy_experiment, run_ensemble_experiment
 import sys
 
 def main(experiment_name):
@@ -107,6 +107,17 @@ def main(experiment_name):
                         baseline_dataframe = baseline_dataframe,
                         FUPS_dict = FUPS_dict,
                         target_series = target_series)
+        
+    elif experiment_name == "Ensemble":
+        print(f"Performing {experiment_name} experiment. \n")
+        
+        run_ensemble_experiment(model_name= "Ensemble",
+                                directory_name = f"./keras_tuner_results/{experiment_name}", 
+                                baseline_dataframe = baseline_dataframe,
+                                FUPS_dict = FUPS_dict,
+                                target_series = target_series,
+                                list_FUP_cols = list_FUP_cols,
+                                patient_dataset = patient_dataset)
     
     else:
         raise ValueError(f"There is no experiment name called {experiment_name}")

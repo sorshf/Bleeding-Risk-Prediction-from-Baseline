@@ -8,6 +8,8 @@ no_events_patients/
 pickle_objects/
 Raw Data/
 Stats/
+results_pics/
+downloaded_from_AWS/
 
 #My experimental codes
 misceleanous.py
