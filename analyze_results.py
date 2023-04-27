@@ -3,6 +3,7 @@ import tensorflow as tf
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
+plt.rcParams["font.family"] = "Times New Roman"
 from clinical_score import main as clinical_score_main
 import json
 import os as os
@@ -20,6 +21,21 @@ model_dict = {
     "All_models": ["Baseline_Dense", "FUP_RNN", "LastFUP_Dense", "Ensemble","FUP_Baseline_Multiinput", 'CHAP','ACCP','RIETE','VTE-BLEED','HAS-BLED','OBRI'],
     "Clinical_models": ['CHAP','ACCP','RIETE','VTE-BLEED','HAS-BLED','OBRI'],
     "ML_models": ["Baseline_Dense", "LastFUP_Dense","FUP_RNN", "Ensemble","FUP_Baseline_Multiinput"]
+}
+
+model_paper_dic = {
+    "Baseline_Dense":"Baseline-ANN",
+    "LastFUP_Dense":"LastFUP-ANN",
+    "FUP_RNN":"FUP-RNN",
+    "Ensemble":"Ensemble",
+    "FUP_Baseline_Multiinput":"Multimodal",
+    'CHAP':"CHAP",
+    'ACCP':'ACCP',
+    'RIETE':'RIETE',
+    'VTE-BLEED':'VTE-BLEED',
+    'HAS-BLED':'HAS-BLED',
+    'OBRI':'OBRI',
+    "Random_clf": "Random-Classifier"
 }
 
 #create tf_get_auc function that calculates the roc auc and pr auc, test on the 
@@ -273,25 +289,25 @@ def plot_ROC_PR():
                 marker = "*-"
             
 
-            plt.plot(FPR, recall_curve, marker, label=f"{model_name} {ROC_AUC:.3}", color=color)
+            plt.plot(FPR, recall_curve, marker, label=f"{model_name} {ROC_AUC:.3}",linewidth=1.2,markersize=4, color=color)
             
         #The random classifier
         plt.plot([0,1], [0, 1], ":", color="black", label="Random_clf 0.50")
 
 
         handles, labels = plt.gca().get_legend_handles_labels()
-        handle_label_obj = [(h,l, float(l.split(" ")[1])) for h, l in zip(handles, labels)]
+        handle_label_obj = [(h,model_paper_dic[l.split(" ")[0]], float(l.split(" ")[1])) for h, l in zip(handles, labels)]
 
         handle_label_obj = sorted(handle_label_obj, key=lambda hl:hl[2], reverse=True)
 
 
-        plt.legend([h[0] for h in handle_label_obj],[h[1] for h in handle_label_obj])
+        plt.legend([h[0] for h in handle_label_obj],[str(h[1])+f" ({h[2]})" for h in handle_label_obj], loc='best', title="Model (AUROC)", fancybox=True, fontsize='small')
 
                 
-        ax.set_xlabel("False Positive Rate")
-        ax.set_ylabel("Recall")
+        ax.set_xlabel("False Positive Rate (1-Specificity)", fontdict={"fontsize":12})
+        ax.set_ylabel("Recall", fontdict={"fontsize":12})
         
-        fig.savefig(f"./results_pics/roc_curve_{model_set}.pdf")
+        fig.savefig(f"./results_pics/roc_curve_{model_set}.png", dpi=300)
     
     #############################
     
@@ -316,7 +332,7 @@ def plot_ROC_PR():
                 marker = "*-"
             
 
-            plt.plot(recall_curve, precision_curve, marker, label=f"{model_name} {PR_AUC:.3}", color=color)
+            plt.plot(recall_curve, precision_curve, marker, label=f"{model_name} {PR_AUC:.3}",linewidth=1.2,markersize=4, color=color)
 
         
         num_positive = detailed_test_res["y_actual"].sum()
@@ -328,17 +344,17 @@ def plot_ROC_PR():
         
         
         handles, labels = plt.gca().get_legend_handles_labels()
-        handle_label_obj = [(h,l, float(l.split(" ")[1])) for h, l in zip(handles, labels)]
+        handle_label_obj = [(h,model_paper_dic[l.split(" ")[0]], float(l.split(" ")[1])) for h, l in zip(handles, labels)]
 
         handle_label_obj = sorted(handle_label_obj, key=lambda hl:hl[2], reverse=True)
 
 
-        plt.legend([h[0] for h in handle_label_obj],[h[1] for h in handle_label_obj])
+        plt.legend([h[0] for h in handle_label_obj],[str(h[1])+f" ({h[2]})" for h in handle_label_obj], loc='best', title="Model (AUPRC)", fancybox=True, fontsize='small')
                 
-        ax.set_xlabel("Recall")
-        ax.set_ylabel("Precision")
+        ax.set_xlabel("Recall", fontdict={"fontsize":12})
+        ax.set_ylabel("Precision", fontdict={"fontsize":12})
         
-        fig.savefig(f"./results_pics/pr_curve_{model_set}.pdf")
+        fig.savefig(f"./results_pics/pr_curve_{model_set}.png", dpi=300)
 
 
 def plot_confusion_matrix():
@@ -352,7 +368,7 @@ def plot_confusion_matrix():
         mosaic = [["All","All","All", "1", "2", "3", "4", "5", "6"],
                 ["All","All","All", "7", "8", "9", "10", "11", "12"]]
 
-        fig, axd = plt.subplot_mosaic(mosaic, figsize=(15, 4), layout="constrained")
+        fig, axd = plt.subplot_mosaic(mosaic, figsize=(13, 4), layout="constrained")
 
         for fup_num in ["All","1", "2", "3", "4", "5", "6","7", "8", "9", "10", "11", "12"]:
             
@@ -363,19 +379,25 @@ def plot_confusion_matrix():
             
             if fup_num != "All":
                 sns.heatmap(heatmap, annot=True,linewidths=0.1,cmap=sns.color_palette("viridis", as_cmap=True), square=True, 
-                            annot_kws={"size": 10}, fmt="g", ax=axd[fup_num], cbar=False)
+                            annot_kws={"size": 11}, fmt="g", ax=axd[fup_num], cbar=False)
+                label_size = 8
+                
             else:
                 sns.heatmap(heatmap, annot=True,linewidths=0.1,cmap=sns.color_palette("viridis", as_cmap=True), square=True, 
-                            annot_kws={"size": 10}, fmt="g", ax=axd[fup_num], cbar=True)
+                            annot_kws={"size": 15}, fmt="g", ax=axd[fup_num], cbar=False)
+                
+                
+                label_size = 16
             
-            
+            axd[fup_num].tick_params(labelsize=label_size)
 
-            axd[fup_num].set_xlabel("Predicted Label")
-            axd[fup_num].set_ylabel("True Label")
-            axd[fup_num].set_title(f"FUP={fup_num}")
 
-        fig.suptitle(name, size=25)
-        fig.savefig(f"./results_pics/{name}_confusion_matrix.png")   
+            axd[fup_num].set_xlabel("Predicted Label", fontdict={"fontsize":label_size})
+            axd[fup_num].set_ylabel("True Label", fontdict={"fontsize":label_size})
+            axd[fup_num].set_title(f"{fup_num} FUPS", size=label_size*1.4)
+
+        fig.suptitle(model_paper_dic[name], size=30)
+        fig.savefig(f"./results_pics/{name}_confusion_matrix.png", dpi=300)#, bbox_inches='tight')   
 
 
 def extract_the_best_hps(number_of_best_hps):
@@ -575,26 +597,101 @@ def create_feature_sets_json():
 
     with open("./keras_tuner_results/feature_sets.json", 'w') as file:
         file.write(json.dumps(feature_selection_dict))
+
+
+def plot_FUP_count_density():
+    """Plots the count and density diagrams for the patients' number of follow-ups.
+    """
+    
+    #Read the patient dataset
+    patient_dataset = prepare_patient_dataset(data_dir, instruction_dir, discrepency_dir)
+
+    #Remove patients without baseline, remove the FUPS after bleeding/termination, fill FUP data for those without FUP data
+    patient_dataset.filter_patients_sequentially(mode="fill_patients_without_FUP")
+    print(patient_dataset.get_all_targets_counts(), "\n")
+
+    #Add one feature to each patient indicating year since baseline to each FUP
+    patient_dataset.add_FUP_since_baseline()
+
+    #Get the BASELINE, and Follow-up data from patient dataset
+    FUPS_dict, list_FUP_cols, baseline_dataframe, target_series = patient_dataset.get_data_x_y(baseline_filter=["uniqid", "dtbas", "vteindxdt", "stdyoatdt", "inrbas"], 
+                                                                                                FUP_filter=[])
+
+    print(f"Follow-up data has {len(FUPS_dict)} examples and {len(list_FUP_cols)} features.")
+    print(f"Baseline data has {len(baseline_dataframe)} examples and {len(baseline_dataframe.columns)} features.")
+    print(f"The target data has {len(target_series)} data.", "\n")
+    
+    
+    
+    bleeding_frequency = []
+    non_bleeder_frequency = []
+
+    for patient in patient_dataset:
+        if patient.get_target() == 1:
+            bleeding_frequency.append(len(patient.get_FUP_array()))
+        else:
+            non_bleeder_frequency.append(len(patient.get_FUP_array()))
+            
+
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11,3))
+
+    color1, color2 = list(sns.color_palette("colorblind", 2))
+
+    sns.histplot(non_bleeder_frequency, discrete=True, multiple="dodge", color=color1,
+                label="Non-bleeders", common_norm=False,stat="count", ax=ax1, alpha=0.5)
+
+    sns.histplot(bleeding_frequency, discrete=True,multiple="dodge",color=color2,
+                label="Bleeders",common_norm=False, stat="count", ax=ax1,alpha=0.5)
+
+    ax1.set_xticks(range(1,14))
+
+    ax1.legend()
+
+    ax1.set_xlabel("Number of Follow-ups", fontdict={"fontsize":12})
+    ax1.set_ylabel("Count", fontdict={"fontsize":12})
+
+    #########
+
+    sns.histplot(non_bleeder_frequency, discrete=True, multiple="dodge",color=color1,
+                label="Non-bleeders", common_norm=False,stat="density", ax=ax2, alpha=0.5)
+
+    sns.histplot(bleeding_frequency, discrete=True,multiple="dodge",color=color2,
+                label="Bleeders", common_norm=False, stat="density", ax=ax2, alpha=0.5)
+
+    ax2.set_xticks(range(1,14))
+    ax2.legend()
+
+    ax2.set_xlabel("Number of Follow-ups", fontdict={"fontsize":12})
+    ax2.set_ylabel("Density", fontdict={"fontsize":12})
+    
+    
+    fig.savefig("./results_pics/number_FUP_count_density.pdf", bbox_inches='tight')
+
        
 def main():
     
-    create_feature_sets_json()
+    # create_feature_sets_json()
     
-    clinical_score_main()
+    # clinical_score_main()
     
-    plot_iterated_k_fold_scores()
+    # plot_iterated_k_fold_scores()
     
-    plot_validations_train_test()
+    # plot_validations_train_test()
     
-    plot_ROC_PR()
+    # plot_ROC_PR()
+    
+    # plot_confusion_matrix()
+    
+    # extract_the_best_hps(number_of_best_hps=200)
+    
+    # get_tn_fp_fn_tn()
+
+    # save_deatiled_metrics_test()
+    
+    # plot_FUP_count_density()
     
     plot_confusion_matrix()
-    
-    extract_the_best_hps(number_of_best_hps=200)
-    
-    get_tn_fp_fn_tn()
-
-    save_deatiled_metrics_test()
     
 if __name__=="__main__":
     main()
