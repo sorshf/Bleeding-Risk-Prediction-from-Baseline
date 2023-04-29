@@ -14,7 +14,10 @@ from hypermodel_experiments import create_feature_set_dicts_baseline_and_FUP
 import copy
 
 from data_preparation import prepare_patient_dataset
-from constants import data_dir, instruction_dir, discrepency_dir
+from constants import data_dir, instruction_dir, discrepency_dir, timeseries_padding_value
+from tensorflow import keras
+from data_preparation import get_abb_to_long_dic
+import re
 
 
 model_dict = {
@@ -666,32 +669,241 @@ def plot_FUP_count_density():
     ax2.set_ylabel("Density", fontdict={"fontsize":12})
     
     
-    fig.savefig("./results_pics/number_FUP_count_density.pdf", bbox_inches='tight')
+    fig.savefig("./results_pics/number_FUP_count_density.pdf", transparent=True, bbox_inches='tight')
 
-       
+
+
+def plot_permutaion_feature_importance_RNN_FUP(number_of_permutations=100):
+    """Plot permutation importance figures for the FUP_RNN model.
+    """
+    
+    #Read the patient dataset
+    patient_dataset = prepare_patient_dataset(data_dir, instruction_dir, discrepency_dir)
+
+    #Remove patients without baseline, remove the FUPS after bleeding/termination, fill FUP data for those without FUP data
+    patient_dataset.filter_patients_sequentially(mode="fill_patients_without_FUP")
+    print(patient_dataset.get_all_targets_counts(), "\n")
+
+    #Add one feature to each patient indicating year since baseline to each FUP
+    patient_dataset.add_FUP_since_baseline()
+
+    #Get the BASELINE, and Follow-up data from patient dataset
+    FUPS_dict, list_FUP_cols, baseline_dataframe, target_series = patient_dataset.get_data_x_y(baseline_filter=["uniqid", "dtbas", "vteindxdt", "stdyoatdt", "inrbas"], 
+                                                                                                FUP_filter=[])
+
+    print(f"Follow-up data has {len(FUPS_dict)} examples and {len(list_FUP_cols)} features.")
+    print(f"Baseline data has {len(baseline_dataframe)} examples and {len(baseline_dataframe.columns)} features.")
+    print(f"The target data has {len(target_series)} data.", "\n")
+
+
+    #Divide all the data into training and testing portions (two stratified parts) where the testing part consists 30% of the data
+    #Note, the training_val and testing portions are generated deterministically.
+    training_val_indeces, testing_indeces = divide_into_stratified_fractions(FUPS_dict, target_series.copy(), fraction=0.3)
+
+
+    #Standardize the training data, and the test data.
+    _ , norm_test_data = normalize_training_validation(training_indeces = training_val_indeces, 
+                                                                        validation_indeces = testing_indeces, 
+                                                                        baseline_data = baseline_dataframe, 
+                                                                        FUPS_data_dict = FUPS_dict, 
+                                                                        all_targets_data = target_series, 
+                                                                        timeseries_padding_value=timeseries_padding_value)
+
+    #unwrap the training-val and testing variables
+    _ , norm_test_fups_X, test_y = norm_test_data
+
+    #Load the saved model
+    model = keras.models.load_model("./keras_tuner_results/FUP_RNN/FUP_RNN.h5")
+
+
+    #Calculate the prc and auc on the non-purturbed dataset
+    test_res = model.evaluate(norm_test_fups_X, test_y, verbose=0)
+    result_dic = {metric:value for metric, value in zip(model.metrics_names,test_res)}
+    auroc = result_dic["auc"]
+    auprc = result_dic["prc"]
+
+    #Create a copy of the test data, vertically stack them along the time axis, then get rid of the padded sequences
+    test_fups_2_dims = copy.deepcopy(norm_test_fups_X)
+    test_fups_2_dims = test_fups_2_dims.reshape(754*13, 45)
+    random_sampling_fups_dataset = test_fups_2_dims[np.sum(test_fups_2_dims, axis=1)!=-225.0]
+
+
+    #A function to purtub time series dataset
+    def purturb_timeseries(test_fups_X, column_index):
+        
+        purturbed_patients_list = []
+
+        for patient in copy.deepcopy(test_fups_X):
+            new_timesteps = []
+            for time in patient:
+                if np.sum(time) != -225.0:
+                    time[column_index] = np.random.choice(random_sampling_fups_dataset[:,column_index])
+                    new_timesteps.append(time)
+                else:
+                    new_timesteps.append(time)
+                    
+            purturbed_patients_list.append(new_timesteps)
+            
+        return np.array(purturbed_patients_list)
+
+
+    #Create a dictionary to convert abbreviations to long names
+    FUPPREDICTOR_dic = get_abb_to_long_dic(instructions_dir="./Raw Data/column_preprocessing_excel test_Mar13_2022.xlsx", 
+                                    CRF_name="FUPPREDICTOR")
+    FUPOUTCOME_dic = get_abb_to_long_dic(instructions_dir="./Raw Data/column_preprocessing_excel test_Mar13_2022.xlsx", 
+                                    CRF_name="FUPOUTCOME")
+
+    abb_dict = dict(FUPPREDICTOR_dic)
+    abb_dict.update(FUPOUTCOME_dic.items())
+
+
+    #Add space in the names of the features to make them look good on figures
+    def turn_space_into_newline(a_string):
+        spaces_list = [a.start() for a in re.finditer(" ", a_string)]
+        s = list(a_string)
+        if len(spaces_list) > 3:
+            s[spaces_list[int(len(spaces_list)/2)-1]] = "\n"
+        return "".join(s)
+
+
+    #New list of column names
+    new_FUP_col_list = []
+
+    abb_dict["years-since-baseline-visit"] = "Years since baseline visit"
+
+    #Getting rid of the Follow-up and also change the names of the columns to their long format name
+    for col in list_FUP_cols:
+        if "_" in col:
+            if col.split("_")[1] in ["Yes", "No", "Continue", "New"]:
+                new_FUP_col_list.append(abb_dict[col.split("_")[0]].replace(" Follow-up", '')+f" ({col.split('_')[1]})")
+            else:
+                new_FUP_col_list.append(abb_dict[col.split("_")[0]].replace(" Follow-up", ''))
+        else:
+            if col in abb_dict:
+                new_FUP_col_list.append(abb_dict[col].replace(" Follow-up", ''))
+            else:
+                new_FUP_col_list.append(col)
+                
+    new_FUP_col_list = [turn_space_into_newline(col) for col in new_FUP_col_list]
+
+
+
+    # For each column in FUP test set
+    ## For number of permutation
+    ### Copy the intact FUP test set
+    ### permute the column for the FUP test set
+    ### record the prc and auc
+
+    prc_permutation_results = {col:[] for col in new_FUP_col_list}
+    roc_permutation_results = {col:[] for col in new_FUP_col_list}
+
+    for col_name, col_indx in zip(new_FUP_col_list, range(len(new_FUP_col_list))):
+        for _ in range(number_of_permutations): #Number of permutations
+            fup_test_copy = copy.deepcopy(norm_test_fups_X)
+            
+            #perturb column
+            purturbed_data = purturb_timeseries(fup_test_copy, column_index=col_indx)
+            
+            test_res = model.evaluate(purturbed_data, test_y, verbose=0)
+            result_dic = {metric:value for metric, value in zip(model.metrics_names,test_res)}
+            
+            prc_permutation_results[col_name].append(auprc-result_dic["prc"])
+            roc_permutation_results[col_name].append(auroc-result_dic["auc"])
+
+
+    color2 = sns.color_palette("colorblind", 15)
+    
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11,5))
+
+
+    data_plot = pd.DataFrame.from_dict({k: v for k, v in sorted(roc_permutation_results.items(), key=lambda item: np.mean(item[1]), reverse=True)})
+    data_plot = pd.concat([data_plot.iloc[:,0:5], data_plot.iloc[:,-5:]], join='outer', axis=1)
+    #ax1.boxplot(data_plot, vert=False)
+    sns.boxplot(data_plot, ax=ax1, orient='h', color=color2[9], showfliers = False)
+    # ax1.set_yticklabels(data_plot.columns, fontsize=8)
+    ax1.vlines(0,-1,45, linestyles="--", color="grey", alpha=0.5)
+    ax1.set_xlabel("Change in AUROC", fontdict={"fontsize":15})
+    sns.stripplot(data_plot, ax=ax1, orient='h', palette='dark:.15', marker=".", alpha=0.2)
+    # ax1.set_yticklabels(ax1.get_yticklabels(),ha="center")
+    ax1.set_ylabel("Predictor Variables", fontdict={"fontsize":15})
+
+
+    data_plot = pd.DataFrame.from_dict({k: v for k, v in sorted(prc_permutation_results.items(), key=lambda item: np.mean(item[1]), reverse=True)})
+    #ax2.boxplot(data_plot, vert=False)
+    data_plot = pd.concat([data_plot.iloc[:,0:5], data_plot.iloc[:,-5 :]], join='outer', axis=1)
+
+    sns.boxplot(data_plot, ax=ax2, orient='h',color=color2[9],showfliers = False)
+    # ax2.set_yticklabels(data_plot.columns, fontsize=8)
+    ax2.vlines(0,-1,45, linestyles="--", color="grey", alpha=0.5)
+    ax2.set_xlabel("Change in AUPRC", fontdict={"fontsize":15})
+    sns.stripplot(data_plot, ax=ax2, orient='h', palette='dark:.15', marker=".", alpha=0.2)
+    # ax2.set_yticklabels(ax2.get_yticklabels(),ha="center")
+
+    ax1.tick_params(axis='both', which='major', labelsize=12)
+    ax2.tick_params(axis='both', which='major', labelsize=12)
+
+    plt.tight_layout()
+
+    fig.savefig("./results_pics/feature_importance_RNN_FUP_10values.png", dpi=300, transparent=True)
+
+
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11,12))
+
+
+    data_plot = pd.DataFrame.from_dict({k: v for k, v in sorted(roc_permutation_results.items(), key=lambda item: np.mean(item[1]), reverse=True)})
+    #ax1.boxplot(data_plot, vert=False)
+    sns.boxplot(data_plot, ax=ax1, orient='h', color=color2[9], showfliers = False)
+    # ax1.set_yticklabels(data_plot.columns, fontsize=8)
+    ax1.vlines(0,-1,45, linestyles="--", color="grey", alpha=0.5)
+    ax1.set_xlabel("Change in AUROC", fontdict={"fontsize":16})
+    sns.stripplot(data_plot, ax=ax1, orient='h', palette='dark:.15', marker=".", alpha=0.2)
+    # ax1.set_yticklabels(ax1.get_yticklabels(),ha="center")
+    ax1.set_ylabel("Predictor Variables", fontdict={"fontsize":16})
+
+
+    data_plot = pd.DataFrame.from_dict({k: v for k, v in sorted(prc_permutation_results.items(), key=lambda item: np.mean(item[1]), reverse=True)})
+    #ax2.boxplot(data_plot, vert=False)
+    sns.boxplot(data_plot, ax=ax2, orient='h',color=color2[9], showfliers = False)
+    # ax2.set_yticklabels(data_plot.columns, fontsize=8)
+    ax2.vlines(0,-1,45, linestyles="--", color="grey", alpha=0.5)
+    ax2.set_xlabel("Change in AUPRC", fontdict={"fontsize":15})
+    sns.stripplot(data_plot, ax=ax2, orient='h', palette='dark:.15', marker=".", alpha=0.2)
+    # ax2.set_yticklabels(ax2.get_yticklabels(),ha="center")
+
+
+    plt.tight_layout()
+
+    ax1.tick_params(axis='both', which='major', labelsize=10)
+    ax2.tick_params(axis='both', which='major', labelsize=10)
+
+    fig.savefig("./results_pics/feature_importance_RNN_FUP.png", dpi=300, transparent=True)
+    
 def main():
     
-    # create_feature_sets_json()
+    create_feature_sets_json()
     
-    # clinical_score_main()
+    clinical_score_main()
     
-    # plot_iterated_k_fold_scores()
+    plot_iterated_k_fold_scores()
     
-    # plot_validations_train_test()
+    plot_validations_train_test()
     
-    # plot_ROC_PR()
-    
-    # plot_confusion_matrix()
-    
-    # extract_the_best_hps(number_of_best_hps=200)
-    
-    # get_tn_fp_fn_tn()
-
-    # save_deatiled_metrics_test()
-    
-    # plot_FUP_count_density()
+    plot_ROC_PR()
     
     plot_confusion_matrix()
+    
+    extract_the_best_hps(number_of_best_hps=200)
+    
+    get_tn_fp_fn_tn()
+
+    save_deatiled_metrics_test()
+    
+    plot_FUP_count_density()
+    
+    plot_confusion_matrix()
+    
+    plot_permutaion_feature_importance_RNN_FUP()
     
 if __name__=="__main__":
     main()
