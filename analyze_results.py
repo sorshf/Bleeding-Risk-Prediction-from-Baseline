@@ -165,11 +165,15 @@ def plot_iterated_k_fold_scores(metric_name = "val_prc"):
  
     
 def plot_validations_train_test():
-    """Plot the ROC and PR curve for the ML_models on the training-val data and test data.
+    """Plot and record csv the ROC and PR curve for the ML_models on the training-val data and test data.
     """
+    
+    #AUROC and PRAUC for each model is saved in ROC_PR_dic for csv
+    ROC_PR_dic = dict()
+    
     fig, ax = plt.subplots()
     
-    model_names = [name for name in model_dict["ML_models"] if name != "Ensemble"]
+    model_names = model_dict["ML_models"]
     
     for name, color in zip(model_names, list(sns.color_palette("colorblind", len(model_names)))):
         roc_pcr_data = pd.read_pickle(f"./keras_tuner_results/{name}/{name}_train_test_results.pkl")
@@ -184,7 +188,8 @@ def plot_validations_train_test():
             else:
                 marker = "-"
                 alpha = 0.5
-            plt.plot(fp_rate, recall_curve, marker, label=f"{name}_{dataset} {auc:.3}", color=color, alpha=alpha)
+            ROC_PR_dic[f"{model_paper_dic[name]}_{dataset}_AUROC"] = f"{auc:.3}"
+            plt.plot(fp_rate, recall_curve, marker, label=f"{model_paper_dic[name]}_{dataset} {auc:.3}", color=color, alpha=alpha)
             
     plt.legend()
     
@@ -208,7 +213,8 @@ def plot_validations_train_test():
             else:
                 marker = "-"
                 alpha = 0.5
-            plt.plot(recall_curve, precision_curve, marker, label=f"{name}_{dataset} {prc:.5}", color=color, alpha=alpha)
+            ROC_PR_dic[f"{model_paper_dic[name]}_{dataset}_AUPRC"] = f"{prc:.5}"
+            plt.plot(recall_curve, precision_curve, marker, label=f"{model_paper_dic[name]}_{dataset} {prc:.5}", color=color, alpha=alpha)
         
     plt.legend()
     
@@ -216,6 +222,18 @@ def plot_validations_train_test():
     ax.set_ylabel("Precision")
     
     plt.savefig(f"./results_pics/pr_ML_models_training_testing.pdf")
+    
+    
+    data  = pd.DataFrame.from_dict(ROC_PR_dic, orient="index", columns=["value"])
+
+    data["dataset"] = data.apply(lambda x: x.name.split("_")[1], axis=1)
+    data["metric"] = data.apply(lambda x: x.name.split("_")[2], axis=1)
+    data["model"] = data.apply(lambda x: x.name.split("_")[0], axis=1)
+
+    data = data.pivot(index="model", columns=["metric", "dataset"], values="value")
+    
+    data.to_csv("./results_pics/detailed_training_testing_AUROC_AUPRC.csv")
+
   
 
 def save_deatiled_metrics_test():
@@ -901,9 +919,9 @@ def main():
     
     plot_FUP_count_density()
     
-    plot_confusion_matrix()
+    # plot_confusion_matrix()
     
-    plot_permutaion_feature_importance_RNN_FUP()
+    # plot_permutaion_feature_importance_RNN_FUP()
     
 if __name__=="__main__":
     main()
