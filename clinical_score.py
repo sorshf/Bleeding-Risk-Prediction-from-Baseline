@@ -111,7 +111,7 @@ class ClinicalScore(BaseEstimator, ClassifierMixin):
     
     
     def get_HAS_BLED_Score(self, X):
-        age = 1 if X['Age Baseline']>=65 else 0
+        age = 1 if X['Age Baseline']>65 else 0
         
         previous_gas_bleed = 1 if X['Prior gastrointestinal bleed']==1 else 0
         
@@ -129,11 +129,11 @@ class ClinicalScore(BaseEstimator, ClassifierMixin):
     
     
     def get_OBRI_Score(self, X):
-        age = 1 if X['Age Baseline']>=65 else 0
+        age = 1 if X['Age Baseline']>=65 else 0 #On OBRI paper, it is >= 65
+        previous_stroke = 1 if X['Prior stroke (CVA)']==1 else 0
         previous_gas_bleed = 1 if X['Prior gastrointestinal bleed']==1 else 0
         
         renal_failure = 1 if X['Creatinine (umol/L)']>133 else 0
-        previous_stroke = 1 if X['Prior stroke (CVA)']==1 else 0
         
         diabete = 1 if X['Diabetes Mellitus']==1 else 0
         
@@ -144,7 +144,9 @@ class ClinicalScore(BaseEstimator, ClassifierMixin):
         
         myocardial_infarction = 1 if X['Prior myocardial infarction']==1 else 0
         
-        return age+previous_gas_bleed+renal_failure+previous_stroke+diabete+anemia+myocardial_infarction
+        comorbidity = 1 if sum([renal_failure,diabete,anemia,myocardial_infarction])>0 else 0
+        
+        return age+previous_gas_bleed+previous_stroke+comorbidity
         
         
     def predict(self, X, mode="decision"):
