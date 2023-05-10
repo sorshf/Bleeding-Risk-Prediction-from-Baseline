@@ -268,7 +268,7 @@ def save_deatiled_metrics_test():
                 tf.math.add(tp, fp)).numpy()
         
         all_data.append({
-            "Name": model_name,
+            "Name": model_paper_dic[model_name],
             "PR_AUC": round(PR_AUC, 3),
             "ROC_AUC": round(ROC_AUC, 3),
             "Precision": round(precision, 3),
@@ -282,7 +282,7 @@ def save_deatiled_metrics_test():
              
         })
         
-    pd.DataFrame.from_records(all_data).sort_values(by="PR_AUC", ascending=False).to_csv("./results_pics/detailed_metrics_table_all_models.csv")
+    pd.DataFrame.from_records(all_data).to_csv("./results_pics/detailed_metrics_table_all_models.csv")
         
     
 def plot_ROC_PR():
@@ -899,25 +899,25 @@ def plot_permutaion_feature_importance_RNN_FUP(number_of_permutations=100):
     
 def main():
     
-    create_feature_sets_json()
+    # create_feature_sets_json()
     
-    clinical_score_main()
+    # clinical_score_main()
     
-    plot_iterated_k_fold_scores()
+    # plot_iterated_k_fold_scores()
     
-    plot_validations_train_test()
+    # plot_validations_train_test()
     
-    plot_ROC_PR()
+    # plot_ROC_PR()
     
-    plot_confusion_matrix()
+    # plot_confusion_matrix()
     
-    extract_the_best_hps(number_of_best_hps=200)
+    # extract_the_best_hps(number_of_best_hps=200)
     
-    get_tn_fp_fn_tn()
+    # get_tn_fp_fn_tn()
 
     save_deatiled_metrics_test()
     
-    plot_FUP_count_density()
+    # plot_FUP_count_density()
     
     # plot_confusion_matrix()
     
