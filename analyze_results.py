@@ -19,6 +19,11 @@ from tensorflow import keras
 from data_preparation import get_abb_to_long_dic
 import re
 
+from mlxtend.evaluate import cochrans_q
+from mlxtend.evaluate import mcnemar_table
+from mlxtend.evaluate import mcnemar
+from matplotlib import colors
+
 
 model_dict = {
     "All_models": ["Baseline_Dense", "FUP_RNN", "LastFUP_Dense", "Ensemble","FUP_Baseline_Multiinput", 'CHAP','ACCP','RIETE','VTE-BLEED','HAS-BLED','OBRI'],
@@ -896,7 +901,76 @@ def plot_permutaion_feature_importance_RNN_FUP(number_of_permutations=100):
     ax2.tick_params(axis='both', which='major', labelsize=10)
 
     fig.savefig("./results_pics/feature_importance_RNN_FUP.png", dpi=300, transparent=True)
+ 
+ 
+ 
+def mcnemar_analysis():
+    """Perform Cochran's Q test, followed by pairwise McNemar test. Generate a pic of the p-values as a heatmap"""
     
+    #Create a dictionary with the predicted class of the data on the testing set
+    y_pred_dict = dict()
+
+    #Populate the dictionary made above
+    for model_name in model_dict["All_models"]:
+        detailed_test_res = pd.read_csv(f"./keras_tuner_results/{model_name}/{model_name}_detailed_test_results.csv")
+        
+        y_pred = np.array(detailed_test_res["y_pred_classes"])
+        y_actual = np.array(detailed_test_res["y_actual"])
+        
+        y_pred_dict[model_paper_dic[model_name]] = y_pred
+        
+
+    #Perform Cochrane's Q test
+    q_cochrane, p_value_cochrane = cochrans_q(y_actual, 
+                            y_pred_dict["Baseline-ANN"],
+                            y_pred_dict["FUP-RNN"],
+                            y_pred_dict["LastFUP-ANN"],
+                            y_pred_dict["Ensemble"],
+                            y_pred_dict["Multimodal"],
+                            y_pred_dict["CHAP"],
+                            y_pred_dict["ACCP"],
+                            y_pred_dict["RIETE"],
+                            y_pred_dict["VTE-BLEED"],
+                            y_pred_dict["HAS-BLED"],
+                            y_pred_dict["OBRI"],
+                            )
+
+
+    #Perform pairwise mcnemar's test
+    stat_test_results = pd.DataFrame(columns=y_pred_dict.keys(), index=y_pred_dict.keys())
+    for model_1 in y_pred_dict.keys():
+        for model_2 in y_pred_dict.keys():
+            chi2, p_value = mcnemar(mcnemar_table(y_actual, 
+                            y_pred_dict[model_1],
+                            y_pred_dict[model_2]),
+                            corrected=True, exact=True)
+            stat_test_results.loc[model_1, model_2] = "{:.2e}".format(p_value)
+            
+
+    #Plot the hitmap for the p-values
+    fig, ax = plt.subplots(figsize=(9.5,6))
+
+    cmap = (colors.ListedColormap(['#20e84f', '#abf5bc', '#f2d666'])
+            .with_extremes(over='9e-3', under='9e-4'))
+
+    bounds = [9.09e-50, 9.09e-04, 9.09e-03, 1.01]
+    norm = colors.BoundaryNorm(bounds, cmap.N)
+
+    mask = np.zeros_like(stat_test_results, dtype=bool)
+    mask[np.triu_indices_from(mask)] = True
+
+
+    sns.heatmap(stat_test_results.astype(float),annot=True, cmap=cmap, norm=norm,fmt=".2e", annot_kws={"fontsize":9}, 
+                square=False,linewidths=.7, ax=ax, cbar=True, cbar_kws={'format': '%.2e', 'label':"$\it{p}$-value", "shrink": 0.75},
+                mask=mask)
+
+
+
+    ax.set_title(f"Cochrane's Q test p-value is {p_value_cochrane:.3g}")
+
+    plt.savefig("./results_pics/mcnemar.png", transparent=False, bbox_inches="tight", dpi=300) 
+    
+        
 def main():
     
     # create_feature_sets_json()
@@ -915,7 +989,7 @@ def main():
     
     # get_tn_fp_fn_tn()
 
-    save_deatiled_metrics_test()
+    # save_deatiled_metrics_test()
     
     # plot_FUP_count_density()
     
@@ -923,5 +997,6 @@ def main():
     
     # plot_permutaion_feature_importance_RNN_FUP()
     
+    mcnemar_analysis()
 if __name__=="__main__":
     main()
