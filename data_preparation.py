@@ -533,6 +533,9 @@ def prepare_BASELINE(data_dir, instruction_dir, discrepency_dir):
     #Any patient with missing "hemglbas" will be 1, otherwise, it will be 0.
     df_BASELINE["nohemglbbas"] = df_BASELINE.apply(lambda x: 1 if pd.isna(x["hemglbas"]) else 0, axis=1)
 
+    #Any patients with missing "inrbas" will be 1, otherwise it will be 0.
+    df_BASELINE["noinrbas"] = df_BASELINE.apply(lambda x: 1 if pd.isna(x["inrbas"]) else 0, axis=1)
+    
     #Filling the 5 NAs in the vteindxdvtleg by using the info from vteindxdvtlt and vteindxdvtrt
     df_BASELINE["vteindxdvtleg"] = df_BASELINE.apply(lambda x:1 if pd.isna(x["vteindxdvtleg"]) &
                                         ((x["vteindxdvtlt"]==1)|(x["vteindxdvtrt"]==1)) else x["vteindxdvtleg"], 

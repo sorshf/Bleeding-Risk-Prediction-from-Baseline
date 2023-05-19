@@ -585,7 +585,7 @@ def create_feature_sets_json():
     patient_dataset.add_FUP_since_baseline()
 
     #Get the BASELINE, and Follow-up data from patient dataset
-    FUPS_dict, list_FUP_cols, baseline_dataframe, target_series = patient_dataset.get_data_x_y(baseline_filter=["uniqid", "dtbas", "vteindxdt", "stdyoatdt", "inrbas"], 
+    FUPS_dict, list_FUP_cols, baseline_dataframe, target_series = patient_dataset.get_data_x_y(baseline_filter=["uniqid", "dtbas", "vteindxdt", "stdyoatdt", "inrbas", "noinrbas"], 
                                                                                                 FUP_filter=[])
     print(f"Follow-up data has {len(FUPS_dict)} examples and {len(list_FUP_cols)} features.")
     print(f"Baseline data has {len(baseline_dataframe)} examples and {len(baseline_dataframe.columns)} features.")
