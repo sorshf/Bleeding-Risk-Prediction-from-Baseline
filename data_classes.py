@@ -14,6 +14,7 @@ import seaborn as sns
 from constants import COLOR_dic, SYMBOL_dic, SIZE_dic, ALPHA_dic
 import datetime
 import time
+from scipy import stats
 #import matplotlib #uncomment this when running plot_all_data()
 #matplotlib.use("Agg") #uncomment this when running plot_all_data()
 
@@ -536,6 +537,7 @@ class Dataset():
     def __init__(self, name):
         self.name = name
         self.all_patients = []
+        self.missing_genotypes_filled = False
         
     def add_patient(self, patient):
         """Add a patient object to the dataset.
@@ -919,3 +921,48 @@ class Dataset():
             correct_FUPPREDICTION_New_Columns(patient_object=patient, FUP_feature_name="diabmelfu_PWELLS", BASELINE_feature_name="diabmel")
             correct_FUPPREDICTION_New_Columns(patient_object=patient, FUP_feature_name="hypertfu_PWELLS", BASELINE_feature_name="hyprthx")
             correct_FUPPREDICTION_New_Columns(patient_object=patient, FUP_feature_name="atrfibfu_PWELLS", BASELINE_feature_name="atrfib")
+            
+    def fill_missing_genotype_data(self):
+        """For the patients without genotype data, the mode of the genotype will be assigned to them.
+        """
+        #Concatenate all the genotype data so that we can calculate the mode
+        genotype_data = []
+        for patient in self:
+            if patient.GENOTYPE is not None:
+                genotype_columns = patient.GENOTYPE.columns
+                genotype_data.append(patient.GENOTYPE.copy().to_numpy().flatten())
+
+        #Dataframe containing all the available genotype data
+        genotype_df = pd.DataFrame(genotype_data, columns=genotype_columns)
+
+        #Mode of the genotype data to be used for the patients with missing genotype
+        genotype_mode = stats.mode(genotype_df.drop(["uniqid"] ,axis=1).to_numpy(), keepdims=False).mode
+
+        #For patients without genotype data, use the mode genotype
+        #A column is added to the genotype data indicating if the genotype data is missing or not
+        for patient in self:
+            if patient.GENOTYPE is None:
+                filled_genotype_data = np.insert(genotype_mode, 0, patient.uniqid, axis=0)
+                filled_genotype_data = np.append(filled_genotype_data, [1], axis=0)
+                patient.GENOTYPE = pd.DataFrame(filled_genotype_data.reshape(1, len(filled_genotype_data)), columns= list(genotype_df.columns)+["missing_genoype"])        
+            else:
+                filled_genotype_data = patient.GENOTYPE.to_numpy().flatten()
+                filled_genotype_data = np.append(filled_genotype_data, [0], axis=0)
+                patient.GENOTYPE = pd.DataFrame(filled_genotype_data.reshape(1, len(filled_genotype_data)), columns= list(genotype_df.columns)+["missing_genoype"])
+
+    def get_genotype_data(self):
+        if not self.missing_genotypes_filled:
+            print("Filling the missing genotype data values first (with the modes).")
+            self.fill_missing_genotype_data()
+            self.missing_genotypes_filled = True
+        else:
+            print("The missing genotype values are already replaced with the mode.")
+        
+        
+        genotype_data = []
+        for patient in self:
+            genotype_data.append(patient.GENOTYPE.copy().to_numpy().flatten())
+
+        #Dataframe containing all the available genotype data
+        return pd.DataFrame(genotype_data, columns=patient.GENOTYPE.columns).set_index("uniqid")
+                
