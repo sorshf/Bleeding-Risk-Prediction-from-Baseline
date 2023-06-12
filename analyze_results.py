@@ -653,12 +653,22 @@ def plot_FUP_count_density():
     non_bleeder_frequency = []
 
     for patient in patient_dataset:
-        if patient.get_target() == 1:
-            bleeding_frequency.append(len(patient.get_FUP_array()))
+        #For the bleeders
+        if (patient.get_target() == 1): #If the fup was artificial, apped zero (meaning no real fup) to the list
+            if patient.missing_FUP:
+                bleeding_frequency.append(0)            
+            else:
+                bleeding_frequency.append(len(patient.get_FUP_array()))
+        #For the non-bleeders
         else:
-            non_bleeder_frequency.append(len(patient.get_FUP_array()))
-            
-
+            if patient.missing_FUP: #If the fup was artificial, apped zero (meaning no real fup) to the list
+                non_bleeder_frequency.append(0)            
+            else:
+                non_bleeder_frequency.append(len(patient.get_FUP_array()))
+    
+    
+    #unique frequencies of FUPs        
+    follow_up_numbers = len(set(bleeding_frequency).union(set(non_bleeder_frequency)))
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11,3))
 
@@ -670,7 +680,7 @@ def plot_FUP_count_density():
     sns.histplot(bleeding_frequency, discrete=True,multiple="dodge",color=color2,
                 label="Bleeders",common_norm=False, stat="count", ax=ax1,alpha=0.5)
 
-    ax1.set_xticks(range(1,14))
+    ax1.set_xticks(range(follow_up_numbers))
 
     ax1.legend()
 
@@ -685,7 +695,7 @@ def plot_FUP_count_density():
     sns.histplot(bleeding_frequency, discrete=True,multiple="dodge",color=color2,
                 label="Bleeders", common_norm=False, stat="density", ax=ax2, alpha=0.5)
 
-    ax2.set_xticks(range(1,14))
+    ax2.set_xticks(range(follow_up_numbers))
     ax2.legend()
 
     ax2.set_xlabel("Number of Follow-ups", fontdict={"fontsize":12})
@@ -991,12 +1001,12 @@ def main():
 
     # save_deatiled_metrics_test()
     
-    # plot_FUP_count_density()
+    plot_FUP_count_density()
     
     # plot_confusion_matrix()
     
     # plot_permutaion_feature_importance_RNN_FUP()
     
-    mcnemar_analysis()
+    # mcnemar_analysis()
 if __name__=="__main__":
     main()
