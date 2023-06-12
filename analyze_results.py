@@ -387,16 +387,38 @@ def plot_confusion_matrix():
     """Plot confusion matrix for all of the ML models and Clinical models.
     """
 
+    #Read the patient dataset
+    patient_dataset = prepare_patient_dataset(data_dir, instruction_dir, discrepency_dir)
+
+    #Remove patients without baseline, remove the FUPS after bleeding/termination, fill FUP data for those without FUP data
+    patient_dataset.filter_patients_sequentially(mode="fill_patients_without_FUP")
+    print(patient_dataset.get_all_targets_counts(), "\n")
+
+    #Add one feature to each patient indicating year since baseline to each FUP
+    patient_dataset.add_FUP_since_baseline()
+
+    #Get the BASELINE, and Follow-up data from patient dataset
+    FUPS_dict, list_FUP_cols, baseline_dataframe, target_series = patient_dataset.get_data_x_y(baseline_filter=["uniqid", "dtbas", "vteindxdt", "stdyoatdt", "inrbas"], 
+                                                                                                FUP_filter=[])
+
+    print(f"Follow-up data has {len(FUPS_dict)} examples and {len(list_FUP_cols)} features.")
+    print(f"Baseline data has {len(baseline_dataframe)} examples and {len(baseline_dataframe.columns)} features.")
+    print(f"The target data has {len(target_series)} data.", "\n")
+    
+    
+    
     for name in model_dict["All_models"]:
         
         detailed_test_res = pd.read_csv(f"./keras_tuner_results/{name}/{name}_detailed_test_results.csv")
+        
+        detailed_test_res["FUP_numbers"] = detailed_test_res.apply(lambda x: 0 if patient_dataset[int(x['uniqid'])].missing_FUP else x["FUP_numbers"], axis=1)
 
-        mosaic = [["All","All","All", "1", "2", "3", "4", "5", "6"],
-                ["All","All","All", "7", "8", "9", "10", "11", "12"]]
+        mosaic = [["All","All","All", "0", "1", "2", "3", "4", "5", "6"],
+                ["All","All","All", "7", "8", "9", "10", "11", "12", "13"]]
 
         fig, axd = plt.subplot_mosaic(mosaic, figsize=(13, 4), layout="constrained")
 
-        for fup_num in ["All","1", "2", "3", "4", "5", "6","7", "8", "9", "10", "11", "12"]:
+        for fup_num in ["All", "0", "1", "2", "3", "4", "5", "6","7", "8", "9", "10", "11", "12"]:
             
 
             tp, fp, tn, fn = get_conf_matrix(test_res_df=detailed_test_res, fup_number=fup_num, mode="count")
@@ -422,8 +444,11 @@ def plot_confusion_matrix():
             axd[fup_num].set_ylabel("True Label", fontdict={"fontsize":label_size})
             axd[fup_num].set_title(f"{fup_num} FUPS", size=label_size*1.4)
 
+        #The 13th confusion matrix should be empty (no patient with 13 fup in the test set)
+        axd['13'].axis('off')
+        
         fig.suptitle(model_paper_dic[name], size=30)
-        fig.savefig(f"./results_pics/{name}_confusion_matrix.png", dpi=300)#, bbox_inches='tight')   
+        fig.savefig(f"./results_pics/{name}_confusion_matrix_new.png", dpi=300, bbox_inches='tight')   
 
 
 def extract_the_best_hps(number_of_best_hps):
@@ -993,7 +1018,7 @@ def main():
     
     # plot_ROC_PR()
     
-    # plot_confusion_matrix()
+    plot_confusion_matrix()
     
     # extract_the_best_hps(number_of_best_hps=200)
     
@@ -1001,10 +1026,8 @@ def main():
 
     # save_deatiled_metrics_test()
     
-    plot_FUP_count_density()
-    
-    # plot_confusion_matrix()
-    
+    # plot_FUP_count_density()
+        
     # plot_permutaion_feature_importance_RNN_FUP()
     
     # mcnemar_analysis()
