@@ -23,7 +23,10 @@ from mlxtend.evaluate import cochrans_q
 from mlxtend.evaluate import mcnemar_table
 from mlxtend.evaluate import mcnemar
 from matplotlib import colors
+import random 
 
+
+from statistical_tests import correct_p_values, plot_p_value_heatmap
 
 model_dict = {
     "All_models": ["Baseline_Dense", "FUP_RNN", "LastFUP_Dense", "Ensemble","FUP_Baseline_Multiinput", 'CHAP','ACCP','RIETE','VTE-BLEED','HAS-BLED','OBRI'],
@@ -294,7 +297,7 @@ def plot_ROC_PR():
     """Plot the ROC and PR curve for all of the ML models and the clinical scores.
     """
     
-    for model_set in model_dict:
+    for model_set in ['All_models']:
         model_names = model_dict[model_set]
         
         fig, ax = plt.subplots(figsize=(6,5))
@@ -327,17 +330,19 @@ def plot_ROC_PR():
         handle_label_obj = sorted(handle_label_obj, key=lambda hl:hl[2], reverse=True)
 
 
-        plt.legend([h[0] for h in handle_label_obj],[str(h[1])+f" ({h[2]})" for h in handle_label_obj], loc='best', title="Model (AUROC)", fancybox=True, fontsize='small')
+        plt.legend([h[0] for h in handle_label_obj],[str(h[1])+f" ({h[2]})" for h in handle_label_obj], loc='best', title="Model (AUROC)", fancybox=True, 
+                   fontsize=9)
 
                 
-        ax.set_xlabel("False Positive Rate (1-Specificity)", fontdict={"fontsize":12})
-        ax.set_ylabel("Recall", fontdict={"fontsize":12})
+        ax.set_xlabel("False Positive Rate (1-Specificity)", fontdict={"fontsize":13})
+        ax.set_ylabel("Recall", fontdict={"fontsize":13})
+        ax.tick_params(axis='both', which='major', labelsize=12)
         
-        fig.savefig(f"./results_pics/roc_curve_{model_set}.png", dpi=300)
+        fig.savefig(f"./results_pics/roc_curve_{model_set}.pdf")
     
     #############################
     
-    for model_set in model_dict:
+    for model_set in ['All_models']:
         model_names = model_dict[model_set]
 
         fig, ax = plt.subplots(figsize=(6,5))
@@ -375,12 +380,15 @@ def plot_ROC_PR():
         handle_label_obj = sorted(handle_label_obj, key=lambda hl:hl[2], reverse=True)
 
 
-        plt.legend([h[0] for h in handle_label_obj],[str(h[1])+f" ({h[2]})" for h in handle_label_obj], loc='best', title="Model (AUPRC)", fancybox=True, fontsize='small')
+        plt.legend([h[0] for h in handle_label_obj],[str(h[1])+f" ({h[2]})" for h in handle_label_obj], loc='best', title="Model (AUPRC)", fancybox=True, 
+                   fontsize=9)
                 
-        ax.set_xlabel("Recall", fontdict={"fontsize":12})
-        ax.set_ylabel("Precision", fontdict={"fontsize":12})
+        ax.set_xlabel("Recall", fontdict={"fontsize":13})
+        ax.set_ylabel("Precision", fontdict={"fontsize":13})
+        ax.tick_params(axis='both', which='major', labelsize=12)
+
         
-        fig.savefig(f"./results_pics/pr_curve_{model_set}.png", dpi=300)
+        fig.savefig(f"./results_pics/pr_curve_{model_set}.pdf")
 
 
 def plot_confusion_matrix():
@@ -448,7 +456,7 @@ def plot_confusion_matrix():
         axd['13'].axis('off')
         
         fig.suptitle(model_paper_dic[name], size=30)
-        fig.savefig(f"./results_pics/{name}_confusion_matrix_new.png", dpi=300, bbox_inches='tight')   
+        fig.savefig(f"./results_pics/{name}_confusion_matrix_new.pdf", bbox_inches='tight')   
 
 
 def extract_the_best_hps(number_of_best_hps):
@@ -727,7 +735,7 @@ def plot_FUP_count_density():
     ax2.set_ylabel("Density", fontdict={"fontsize":12})
     
     
-    fig.savefig("./results_pics/number_FUP_count_density.pdf", transparent=True, bbox_inches='tight')
+    fig.savefig("./results_pics/number_FUP_count_density.pdf", bbox_inches='tight')
 
 
 
@@ -902,7 +910,7 @@ def plot_permutaion_feature_importance_RNN_FUP(number_of_permutations=100):
 
     plt.tight_layout()
 
-    fig.savefig("./results_pics/feature_importance_RNN_FUP_10values.png", dpi=300, transparent=True)
+    fig.savefig("./results_pics/feature_importance_RNN_FUP_10values.pdf")
 
 
 
@@ -935,7 +943,7 @@ def plot_permutaion_feature_importance_RNN_FUP(number_of_permutations=100):
     ax1.tick_params(axis='both', which='major', labelsize=10)
     ax2.tick_params(axis='both', which='major', labelsize=10)
 
-    fig.savefig("./results_pics/feature_importance_RNN_FUP.png", dpi=300, transparent=True)
+    fig.savefig("./results_pics/feature_importance_RNN_FUP.pdf")
  
  
  
@@ -981,6 +989,14 @@ def mcnemar_analysis():
                             corrected=True, exact=True)
             stat_test_results.loc[model_1, model_2] = "{:.2e}".format(p_value)
             
+    #Correct p-values for multiple hypothesis testing
+    stat_test_results_corrected, multitest_correction = correct_p_values(stat_test_results, multitest_correction="bonferroni")
+    
+    #Plot the hitmap of p_values
+    plot_p_value_heatmap(stat_test_results_corrected, effect_size_df=None, title="McNemar test",
+                         save_path="./results_pics/", multitest_correction=multitest_correction, 
+                     omnibus_p_value=f"Cochran q: {p_value_cochrane}", plot_name="McNemar")
+            
 
     #Plot the hitmap for the p-values
     fig, ax = plt.subplots(figsize=(9.5,6))
@@ -1003,9 +1019,185 @@ def mcnemar_analysis():
 
     ax.set_title(f"Cochrane's Q test p-value is {p_value_cochrane:.3g}")
 
-    plt.savefig("./results_pics/mcnemar.png", transparent=False, bbox_inches="tight", dpi=300) 
+    plt.savefig("./results_pics/mcnemar.pdf", transparent=False, bbox_inches="tight") 
     
+
+def plot_FUP_RNN_probabilities_output():
+    """For the FUP_RNN model, generates the probabilites of bleeding for all the bleeders in the test set and random 
+       subset of non-bleeders in the test set.
+    """
+    
+    #Read the patient dataset
+    patient_dataset = prepare_patient_dataset(data_dir, instruction_dir, discrepency_dir)
+
+    #Remove patients without baseline, remove the FUPS after bleeding/termination, fill FUP data for those without FUP data
+    patient_dataset.filter_patients_sequentially(mode="fill_patients_without_FUP")
+    print(patient_dataset.get_all_targets_counts(), "\n")
+
+    #Add one feature to each patient indicating year since baseline to each FUP
+    patient_dataset.add_FUP_since_baseline()
+
+    #Get the BASELINE, and Follow-up data from patient dataset
+    FUPS_dict, list_FUP_cols, baseline_dataframe, target_series = patient_dataset.get_data_x_y(baseline_filter=["uniqid", "dtbas", "vteindxdt", "stdyoatdt", "inrbas"], 
+                                                                                                FUP_filter=[])
+
+    print(f"Follow-up data has {len(FUPS_dict)} examples and {len(list_FUP_cols)} features.")
+    print(f"Baseline data has {len(baseline_dataframe)} examples and {len(baseline_dataframe.columns)} features.")
+    print(f"The target data has {len(target_series)} data.", "\n")
+
+
+    #Divide all the data into training and testing portions (two stratified parts) where the testing part consists 30% of the data
+    #Note, the training_val and testing portions are generated deterministically.
+    training_val_indeces, testing_indeces = divide_into_stratified_fractions(FUPS_dict, target_series.copy(), fraction=0.3)
+
+
+    #Standardize the training data, and the test data.
+    _ , norm_test_data = normalize_training_validation(training_indeces = training_val_indeces, 
+                                                                        validation_indeces = testing_indeces, 
+                                                                        baseline_data = baseline_dataframe, 
+                                                                        FUPS_data_dict = FUPS_dict, 
+                                                                        all_targets_data = target_series, 
+                                                                        timeseries_padding_value=timeseries_padding_value)
+
+    #unwrap the training-val and testing variables
+    _ , norm_test_fups_X, test_y = norm_test_data
+
+    #Load the saved model
+    model = keras.models.load_model("./keras_tuner_results/FUP_RNN/FUP_RNN.h5")
+    
+    #This should be run because of a bug in tf!!
+    test_res = model.predict(norm_test_fups_X[0:1])
+    
+    #Calculate the progression of probabilites 
+    probability_progression = dict()
+    for i, uniqid in enumerate(testing_indeces):
         
+        all_prob = []
+        
+        for t in range(13):
+            if np.sum(norm_test_fups_X[i:i+1,t:t+1,:]) == -225.0: #These are the timestamps that were padded
+                break
+            
+            prob = model.predict(norm_test_fups_X[i:i+1,0:t+1,:])
+            all_prob.append(float(prob))
+            
+        probability_progression[uniqid] = all_prob
+        
+        
+    #Create two dictionaries to store positive (bleeders) and negative (non-bleeders) patients as uniqid:num_FUP
+    id_to_target_dict = {test_id:test_y[test_id] for test_id in testing_indeces}
+    id_to_num_FUP_dict_pos = {key_:len(val_) for key_, val_ in probability_progression.items() if id_to_target_dict[key_]==1}
+    id_to_num_FUP_dict_neg = {key_:len(val_) for key_, val_ in probability_progression.items() if id_to_target_dict[key_]==0}
+    
+    #For the patients with missing FUP (that were artificially generated), we set the number of their FUP as zero
+    for id_ in id_to_num_FUP_dict_neg:
+        if patient_dataset[id_].missing_FUP:
+            id_to_num_FUP_dict_neg[id_] = 0
+        
+    for id_ in id_to_num_FUP_dict_pos:
+        if patient_dataset[id_].missing_FUP:
+            id_to_num_FUP_dict_pos[id_] = 0
+
+    #For the dictionary with non-bleeders, because they are many, we randomly sample some of them
+    random.seed(1)
+
+    dict_of_num_FUP_to_list_of_uniqids = dict()
+
+    for num_FUP in range(13):
+        #Initialize the list which is the value for the keys
+        if num_FUP not in dict_of_num_FUP_to_list_of_uniqids:
+            dict_of_num_FUP_to_list_of_uniqids[num_FUP] = []
+            
+        #Populate the dict
+        for uniqid in id_to_num_FUP_dict_neg:
+            if id_to_num_FUP_dict_neg[uniqid] == num_FUP:
+                dict_of_num_FUP_to_list_of_uniqids[num_FUP].append(uniqid)
+                
+    #Randomly choose 10, 10, 6 , 4, 4, 3, 3, 2, 2, 2, 2 patients from the negatives (non-bleeders)
+    dict_of_num_FUP_to_list_of_uniqids[0] = random.sample(dict_of_num_FUP_to_list_of_uniqids[0], 10)
+    dict_of_num_FUP_to_list_of_uniqids[1] = random.sample(dict_of_num_FUP_to_list_of_uniqids[1], 10)
+    dict_of_num_FUP_to_list_of_uniqids[2] = random.sample(dict_of_num_FUP_to_list_of_uniqids[2], 6)
+    dict_of_num_FUP_to_list_of_uniqids[3] = random.sample(dict_of_num_FUP_to_list_of_uniqids[3], 4)
+    dict_of_num_FUP_to_list_of_uniqids[4] = random.sample(dict_of_num_FUP_to_list_of_uniqids[4], 4)
+    dict_of_num_FUP_to_list_of_uniqids[5] = random.sample(dict_of_num_FUP_to_list_of_uniqids[5], 3)
+    dict_of_num_FUP_to_list_of_uniqids[6] = random.sample(dict_of_num_FUP_to_list_of_uniqids[6], 3)
+    dict_of_num_FUP_to_list_of_uniqids[7] = random.sample(dict_of_num_FUP_to_list_of_uniqids[7], 3)
+    dict_of_num_FUP_to_list_of_uniqids[8] = random.sample(dict_of_num_FUP_to_list_of_uniqids[8], 2)
+    dict_of_num_FUP_to_list_of_uniqids[9] = random.sample(dict_of_num_FUP_to_list_of_uniqids[9], 2)
+    dict_of_num_FUP_to_list_of_uniqids[10] = random.sample(dict_of_num_FUP_to_list_of_uniqids[10], 2)
+    dict_of_num_FUP_to_list_of_uniqids[11] = random.sample(dict_of_num_FUP_to_list_of_uniqids[11], 2)
+    dict_of_num_FUP_to_list_of_uniqids[12] = random.sample(dict_of_num_FUP_to_list_of_uniqids[12], 2)
+    
+    temp_dict = dict()
+    for key, value in dict_of_num_FUP_to_list_of_uniqids.items():
+        for uniqid in value:
+            temp_dict[uniqid] = key
+            
+    id_to_num_FUP_dict_neg = temp_dict
+    
+    
+    #Function to graph the probabilties
+    def draw_probability_FUP_RNN(dict_of_id_to_num_FUP, dict_of_probabilities_progression, color, name):
+
+        number_of_FUP_set = set(dict_of_id_to_num_FUP.values())
+
+        plt.rc('xtick', labelsize=6)    # fontsize of the tick labels
+        plt.rc('ytick', labelsize=8)    # fontsize of the tick labels
+        
+        fig_height = len(number_of_FUP_set)*11.7/8
+        fig_width = 8.3/2 if len(number_of_FUP_set) < 9 else 8.3/1.1
+        
+
+        fig = plt.figure(layout="constrained", figsize=(fig_width, fig_height))
+        
+        
+        subfigs = fig.subfigures(len(number_of_FUP_set), 1) 
+        
+        for subfig_num, number_of_FUP in enumerate(number_of_FUP_set):
+            ids_to_draw = [id_ for id_ in dict_of_id_to_num_FUP if  dict_of_id_to_num_FUP[id_] == number_of_FUP ]
+            number_of_pics = len(ids_to_draw)
+
+            axs = subfigs[subfig_num].subplots(1,number_of_pics,sharey=True)
+
+            if len(ids_to_draw)==1:
+                axs = [axs]
+
+            for i, ax, uniqid in zip(range(1, number_of_pics+1), axs, ids_to_draw):
+                
+
+                probs = dict_of_probabilities_progression[uniqid]
+                
+                
+                ax.plot(range(1, len(probs)+1), probs, color=color)
+
+                ax.scatter(range(1, len(probs)+1), probs, color=color)
+
+                ax.set_ylim(bottom = 0, top = 1)
+
+                ax.set_xticklabels(["FUP"+" "+str(lab) for lab in range(1, len(probs)+1)])
+                
+                if number_of_FUP == 0:
+                    ax.set_xticklabels(["FUP"+" "+str(lab) for lab in range(0, len(probs)+1)])    
+                
+                ax.set_xticks(range(1, len(probs)+1))
+
+                ax.axhline(y=0.5, xmin = 0, xmax=len(probs), color='gray', linestyle="dotted", alpha=0.5)
+
+                ax.set_xlim(0.5, len(probs) + 0.5)
+                
+                for x, y in zip(range(1, len(probs)+1), probs):
+                    ax.text(x-0.28, y+0.07, f'{y:.3}', fontdict={'fontsize':6})
+                
+                if i == 1:
+                    ax.set_ylabel("$\it{P}$ $(bleeding)$")
+                    
+        fig.savefig(f"./results_pics/FUP_RNN_probabilities_{name}.pdf")  
+
+    
+    draw_probability_FUP_RNN(dict_of_id_to_num_FUP=id_to_num_FUP_dict_neg, dict_of_probabilities_progression=probability_progression, color='blue', name="non_bleeders")               
+    draw_probability_FUP_RNN(dict_of_id_to_num_FUP=id_to_num_FUP_dict_pos, dict_of_probabilities_progression=probability_progression, color='red', name="bleeders")   
+    
+               
 def main():
     
     # create_feature_sets_json()
@@ -1016,9 +1208,9 @@ def main():
     
     # plot_validations_train_test()
     
-    # plot_ROC_PR()
+    # plot_ROC_PR()           ##################################
     
-    plot_confusion_matrix()
+    # plot_confusion_matrix()          ##################################
     
     # extract_the_best_hps(number_of_best_hps=200)
     
@@ -1026,10 +1218,13 @@ def main():
 
     # save_deatiled_metrics_test()
     
-    # plot_FUP_count_density()
+    # plot_FUP_count_density()            ##################################
         
-    # plot_permutaion_feature_importance_RNN_FUP()
+    # plot_permutaion_feature_importance_RNN_FUP()            ##################################
     
     # mcnemar_analysis()
+    
+    plot_FUP_RNN_probabilities_output()
+    
 if __name__=="__main__":
     main()
