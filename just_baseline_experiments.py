@@ -34,9 +34,17 @@ import time
 import sys
 import itertools
 import matplotlib.pyplot as plt
+plt.rcParams["font.family"] = "Times New Roman"
 import seaborn as sns
 
-
+from sklearn.decomposition import PCA, KernelPCA
+from sklearn.manifold import TSNE, Isomap
+from sklearn.cluster import AgglomerativeClustering, KMeans
+from sklearn.metrics import completeness_score, homogeneity_score
+from matplotlib.patches import Patch
+from matplotlib.lines import Line2D
+from scipy.cluster.hierarchy import dendrogram, linkage, fcluster
+from scipy.cluster import hierarchy
 
 all_models = {
     'CHAP':"Clinical",
@@ -605,6 +613,318 @@ def main(mode):
     else:
         raise Exception(f"The mode {mode} doesn't exist.")
     
+
+def perform_unsupervised_learning():
+    
+    #Function to get the full (descriptive) name of the features
+    def get_long_name(abb_to_long_dictionary, col):
+        if "_" in col:
+            return abb_to_long_dictionary[col.split("_")[0]]+"-"+col.split("_")[1]
+        elif col in abb_to_long_dictionary:
+            return abb_to_long_dictionary[col]
+        else:
+            return col
+        
+    #Read the patient dataset
+    patient_dataset = prepare_patient_dataset(data_dir, instruction_dir, discrepency_dir)
+
+    #Remove patients without baseline, remove the FUPS after bleeding/termination, fill FUP data for those without FUP data
+    patient_dataset.filter_patients_sequentially(mode="fill_patients_without_FUP")
+    print(patient_dataset.get_all_targets_counts(), "\n")
+
+    #Add one feature to each patient indicating year since baseline to each FUP
+    patient_dataset.add_FUP_since_baseline()
+
+    #Get the BASELINE, and Follow-up data from patient dataset
+    _, _, baseline_dataframe, target_series = patient_dataset.get_data_x_y(baseline_filter=["uniqid", "dtbas", "vteindxdt", "stdyoatdt"], 
+                                                                                                FUP_filter=[])
+
+    #Get the genotype data
+    genotype_data = patient_dataset.get_genotype_data()
+
+    #Change the names of the columns in the baseline data to make them compatible with the clinical score
+    abb_to_long_dic = get_abb_to_long_dic(instructions_dir=instruction_dir, CRF_name="BASELINE")
+    baseline_dataframe.columns = [get_long_name(abb_to_long_dic, col) for col in baseline_dataframe.columns]
+
+
+    #Concat the Baseline and Genotype data
+    concat_x = baseline_dataframe.join(genotype_data)
+    
+    
+    ###########################
+    #Calculate the time since bleeding from baseline and categorize patients
+    
+    bleeding_since_baseline = []
+    for patient in patient_dataset.all_patients:
+        if patient.AD1 is not None:
+            number_of_maj_bleed = 0
+            for bleed_occurance in patient.AD1:
+                if bleed_occurance["majbldconf"] == 1:
+                    number_of_maj_bleed += 1
+                    date_of_bleed = bleed_occurance["blddtadj"]
+                    date_of_baseline = patient.BASELINE["dtbas"].values[0]
+                    year_since_bleed = round(pd.Timedelta(date_of_bleed - date_of_baseline).days/365., 2)
+                    if year_since_bleed <= 1:
+                        year_since_bleed_str = "Bleeders (time-since-baseline ≤ 1-year)"
+                    elif (year_since_bleed > 1) and (year_since_bleed <= 2):
+                        year_since_bleed_str = "Bleeders (1-year < time-since-baseline ≤ 2-years)"
+                    else:
+                        year_since_bleed_str = "Bleeders (time-since-baseline > 2-years)"
+                    
+                    #Some patients have more than one major bleed, we only keep the first one (hence the if statement)
+                    if number_of_maj_bleed == 1:
+                        bleeding_since_baseline.append(year_since_bleed_str)
+            #There are patients who have the AD1 filled for them, but they didn't bleed
+            if number_of_maj_bleed == 0:
+                bleeding_since_baseline.append("Non-bleeders")
+
+        else:
+            bleeding_since_baseline.append("Non-bleeders")
+            
+    ###################################
+    
+    
+    #Scale the baseline dataset for unsupervised learning
+    scaler = StandardScaler()
+    concat_scaled_df = pd.DataFrame(scaler.fit_transform(concat_x),  columns = concat_x.columns)
+    
+    
+    #Dimentionality reduction techniques
+    feature_decomp_method_dics = {
+        "PCA": PCA(n_components=2),
+        "Kernel PCA": KernelPCA(n_components=2, kernel="rbf",  gamma=None, fit_inverse_transform=False, alpha=1),
+        "Isomap": Isomap(n_components=2, n_neighbors=20, p=1),
+
+        "t-SNE (perplexity: 5)": TSNE(n_components=2, perplexity=5, init="random", n_iter=250, random_state=0),
+        "t-SNE (perplexity: 10)": TSNE(n_components=2, perplexity=10, init="random", n_iter=250, random_state=0),
+        "t-SNE (perplexity: 15)": TSNE(n_components=2, perplexity=15, init="random", n_iter=250, random_state=0),
+        "t-SNE (perplexity: 30)": TSNE(n_components=2, perplexity=30, init="random", n_iter=250, random_state=0),
+    }
+
+    # y = ["bleeders" if val==1 else "non-bleeders" for val in target_series ]
+    # colors = ["red" if val==1 else "blue" for val in target_series ]
+    
+    #######################################
+    #Figure with lower dimention visualized
+
+    colors = ["#ed6925" if status != "Non-bleeders" else "#000004" for status in bleeding_since_baseline]
+    alphas = [1 if status != "Non-bleeders" else 0.5 for status in bleeding_since_baseline]
+    zorders = [3 if status != "Non-bleeders" else -1 for status in bleeding_since_baseline ]
+    markers = ["o" if status != "Non-bleeders" else "o" for status in bleeding_since_baseline ]
+    edgecolors = [None if status != "Non-bleeders" else None for status in bleeding_since_baseline ]
+    labels = ["Bleeder" if status != "Non-bleeders" else "Non-bleeder" for status in bleeding_since_baseline ]
+
+    def legend_without_duplicate_labels(ax):
+        ax.legend( fontsize = 6)
+
+        handles, labels = ax.get_legend_handles_labels()
+        unique = [(h, l) for i, (h, l) in enumerate(zip(handles, labels)) if l not in labels[:i]]
+        ax.legend(*zip(*unique), loc='lower left', bbox_to_anchor=(0, 1.2, 1, 0.2),
+            ncol=3, mode="expand")
+
+
+    fig = plt.figure(layout="constrained", figsize=(8.3, 5.6))
+    subfigs = fig.subfigures(2, 1, hspace= 0.05, wspace= 0.05)
+
+    axsTop = subfigs[0].subplots(1, 3)
+    axsBottom = subfigs[1].subplots(1, 4)
+        
+
+    for method, ax in zip(feature_decomp_method_dics, [*axsTop, *axsBottom]):
+        
+        X_processed = feature_decomp_method_dics[method].fit_transform(concat_scaled_df)
+        
+
+        for i, (color, alpha, zorder, label, marker, edgecolor) in enumerate(zip(colors, alphas, zorders, labels, markers, edgecolors)):
+            ax.scatter(X_processed[i,0], X_processed[i,1], marker=marker, c = color, s=12, linewidth=0.1, label=label, zorder= zorder, alpha=alpha)
+
+        ax.get_yaxis().set_visible(False)
+        ax.get_xaxis().set_visible(False)
+
+        ax.set_title(method)
+
+    legend_without_duplicate_labels(axsTop[1])
+
+    fig.savefig(f"./sklearn_results/Figures/dimentionality_reduction_all.pdf",  bbox_inches='tight')  
+
+    ####################################
+    
+    ###################################
+    #Perform clusterting using K-means and Agglomerative clustering on all of the dataset
+    
+    legend_elements = [Line2D([0], [0], marker='o', color='black', markeredgecolor="black" ,lw=0, markersize=12, label='Non-bleeder'),
+                   Line2D([0], [0], marker='X', color='black', markeredgecolor="yellow",lw=0, label='Bleeder', markersize=12),
+                   Patch(facecolor="#f98e09",  label='Cluster 1'),
+                   Patch(facecolor="#57106e", label='Cluster 2'),
+    ]
+
+    clustering_methods_dic = {
+        "K-Means": KMeans(n_clusters=2, random_state=0, n_init="auto"),
+        "Agglomerative Clustering": AgglomerativeClustering(linkage="ward", n_clusters=2)
+    }
+
+
+    X_PCA = PCA(n_components=2).fit_transform(concat_scaled_df)
+
+
+    alphas = [1 if status != "Non-bleeders" else 1 for status in bleeding_since_baseline]
+    zorders = [3 if status != "Non-bleeders" else -1 for status in bleeding_since_baseline ]
+    markers = ["X" if status != "Non-bleeders" else "o" for status in bleeding_since_baseline ]
+    edgecolors = ["yellow" if status != "Non-bleeders" else None for status in bleeding_since_baseline ]
+
+
+    fig, axs = plt.subplots(1, 2, figsize=(10, 5), gridspec_kw={'hspace': 0.15, 'wspace': 0.05})
+
+    for method, ax in zip(clustering_methods_dic, axs.flat):
+
+
+
+        clusters = clustering_methods_dic[method].fit(concat_scaled_df)
+        
+        colors = ["#f98e09" if label != 0 else "#57106e" for label in clusters.labels_]
+
+
+        for i, (color, alpha, zorder, label, marker, edgecolor) in enumerate(zip(colors, alphas, zorders, bleeding_since_baseline, markers, edgecolors)):
+            ax.scatter(X_PCA[i,0], X_PCA[i,1], marker=marker, c = color, s=14, linewidth=0.1, label=label, zorder= zorder, 
+                    alpha=alpha, edgecolors=edgecolor)
+
+        # legend_without_duplicate_labels(ax)
+        ax.get_yaxis().set_visible(False)
+        ax.get_xaxis().set_visible(False)
+
+        ax.text(0.01, 0.99, ha='left', va='top',transform=ax.transAxes,size=8,
+                s=f"Homogeneity: {homogeneity_score(target_series ,clusters.labels_):.2e} \nCompleteness: {completeness_score(target_series,clusters.labels_):.2e}")
+
+        ax.set_title(method)
+        
+    axs[1].legend(handles=legend_elements, loc="center left", bbox_to_anchor=(1.04, 0.5))
+        
+    fig.savefig(f"./sklearn_results/Figures/clustering_pic_all_points.pdf",  bbox_inches='tight')  
+    ###########################################
+    
+    #######################################
+    #Clustering and PCA just on the bleeders
+    #Just analyse the bleeders now
+    only_bleeders_X = concat_x[target_series==1]
+    only_bleeders_X_scaled = pd.DataFrame(StandardScaler().fit_transform(only_bleeders_X), columns=only_bleeders_X.columns, index=only_bleeders_X.index)    
+    
+    #########
+    #The agglomerative clustering on the bleeders
+    fig, ax = plt.subplots(figsize=(15,5))
+
+    Z = linkage(only_bleeders_X_scaled, 'ward')
+
+    hierarchy.set_link_color_palette(["#440154",'#5ec962', '#f98e09'])
+
+    a = dendrogram(Z, labels=only_bleeders_X_scaled.index, leaf_rotation=90, ax=ax)
+
+    max_d = 29
+
+
+    ax.axhline(y=max_d, xmin = 0, xmax=1000, color='gray', linestyle="dotted")
+
+    ax.get_xaxis().set_visible(False)
+
+    ax.set_ylabel("Distance")
+
+    ax.text(x=10, y=30, s=f"Cutoff: {max_d}")
+
+    fig.savefig(f"./sklearn_results/Figures/agglomerative_clustering_bleeders.pdf",  bbox_inches='tight')  
+    ##########
+    
+    ###################
+    #Create PCA of bleeders and visualize it with the three groups found before
+    #Draw loading vectors
+    
+    #Clusters as defined by the agglomerative clustering
+    clusters = fcluster(Z, max_d, criterion='distance')
+
+    #PCA object
+    pca_obj = PCA(n_components=2).fit(only_bleeders_X_scaled)
+
+    #PCA results
+    X_pca = pca_obj.fit_transform(only_bleeders_X_scaled)
+
+    #Get the loadings of the pca object
+    loadings = pd.DataFrame(pca_obj.components_.T, columns=['PC1', 'PC2'], index=only_bleeders_X_scaled.columns)
+    # loadings["sum"] = loadings.apply(lambda x: (np.abs(x["PC1"])+np.abs(x["PC2"])), axis=1)
+    # loadings = loadings.sort_values(by="sum", ascending=False)
+
+    #Scaling factor to draw the loading vectors
+    scale_PC1 = 1.0/(X_pca[:,0].max() - X_pca[:,0].min())
+    scale_PC2 = 1.0/(X_pca[:,1].max() - X_pca[:,1].min())
+    
+    #Clusters as defined by the agglomerative clustering
+    clusters = fcluster(Z, max_d, criterion='distance')
+
+    #PCA object
+    pca_obj = PCA(n_components=2).fit(only_bleeders_X_scaled)
+
+    #PCA results
+    X_pca = pca_obj.fit_transform(only_bleeders_X_scaled)
+
+    #Get the loadings of the pca object
+    loadings = pd.DataFrame(pca_obj.components_.T, columns=['PC1', 'PC2'], index=only_bleeders_X_scaled.columns)
+    #Save all the loadings just in case
+    loadings.to_excel("./sklearn_results/Figures/bleeders_PCA-loadings_all.xlsx")
+
+    #Scaling factor to draw the loading vectors
+    scale_PC1 = 1.0/(X_pca[:,0].max() - X_pca[:,0].min())
+    scale_PC2 = 1.0/(X_pca[:,1].max() - X_pca[:,1].min())
+    
+    #Extract the top three highest and lowest for each principle component
+    loadings_copy = loadings.copy()
+    three_highest_pc1 = loadings_copy.sort_values(by="PC1", ascending=False)[0:3]
+    three_lowest_pc1 = loadings_copy.sort_values(by="PC1", ascending=True)[0:3]
+    three_highest_pc2 = loadings_copy.sort_values(by="PC2", ascending=False)[0:3]
+    three_lowest_pc2 = loadings_copy.sort_values(by="PC2", ascending=True)[0:3]
+
+    loadings_copy = pd.concat([three_highest_pc1, three_lowest_pc1, three_highest_pc2, three_lowest_pc2])
+    loadings_copy.to_excel("./sklearn_results/Figures/bleeders_PCA-loadings_top12.xlsx")
+    ################################
+    
+    ###########
+    #Plot the PCA of the bleeders and the loadings
+    colors = ["#440154" if val==1 else '#5ec962' if val==2  else '#f98e09' for val in clusters]
+
+    fig, ax = plt.subplots(figsize=(9,8))
+
+    ax.scatter(X_pca[:,0]*scale_PC1, X_pca[:,1]*scale_PC2,color=colors)
+
+    pc1_explained_variance, pc2_explained_variance = pca_obj.explained_variance_ratio_
+
+    text_coordinates = [
+        *[(0.35, 0)]*3,
+        *[(-0.6, -0.05)]*3,
+        *[(0, 0.4)]*3,
+        *[(0, -0.3)]*3
+    ]
+
+    k = 0
+    for i, (feature, text_coord) in enumerate(zip(loadings_copy.index, text_coordinates)):
+        if k == 3:
+            k = 0
+        ax.arrow(0, 0, loadings_copy.iloc[i, 0], 
+                loadings_copy.iloc[i, 1],
+                head_width=0.02, 
+                head_length=0.02,
+                alpha=0.5,
+                color="black")
+        
+        ax.text(text_coord[0], 
+            text_coord[1]-0.05*k,
+            feature, color="red", fontsize=10, alpha=0.5)
+        
+        k += 1
+        
+    ax.set_xlabel(f"PC1 ({pc1_explained_variance*100:.2f}%)", fontdict={"size":13})
+    ax.set_ylabel(f"PC2 ({pc2_explained_variance*100:.2}%)", fontdict={"size":13})
+    ax.set_xlim(-0.65, 0.8)
+
+    fig.savefig(f"./sklearn_results/Figures/PCA_of_bleeders_with_loadings.pdf",  bbox_inches='tight')  
+    ########################
+    
+    
     
 if __name__=="__main__":
     if sys.argv[1] == "experiment":
@@ -613,5 +933,7 @@ if __name__=="__main__":
         count_length_of_grid_search()
     elif sys.argv[1] == 'generate_pictures_metrics':
         generate_metric_pictures()
+    elif sys.argv[1] == 'unsupervised':
+        perform_unsupervised_learning()
 
 
