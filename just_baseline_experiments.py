@@ -258,6 +258,10 @@ def get_param_grid_model(classifier):
     elif classifier == "LDA":
         param_grid= [
             {"model__shrinkage":[None, 0.1, 0.5, 0.9, 'auto']},  
+            
+            {"reduce_dim": [PCA(5), PCA(10)],
+            "model__shrinkage":[None, 0.1, 0.5, 0.9, 'auto']},
+            
             {'feature_selection':[SequentialFeatureSelector(LinearDiscriminantAnalysis(), 
                                                                 n_features_to_select=5, scoring=sfs_scoring, 
                                                                 cv=sfs_cv, direction='forward'),
@@ -277,7 +281,11 @@ def get_param_grid_model(classifier):
     
     elif classifier == "QDA":
         param_grid= [
-            {"model__reg_param":[0, 0.1, 0.5, 0.9]},       
+            {"model__reg_param":[0, 0.1, 0.5, 0.9]},    
+            
+            {"reduce_dim": [PCA(5), PCA(10)],
+             "model__reg_param":[0, 0.1, 0.5, 0.9]},
+            
             {'feature_selection':[SequentialFeatureSelector(QuadraticDiscriminantAnalysis(), 
                                                                 n_features_to_select=5, scoring=sfs_scoring, 
                                                                 cv=sfs_cv, direction='forward'),
@@ -303,7 +311,12 @@ def get_param_grid_model(classifier):
                                                                 cv=sfs_cv, direction='forward'),
                                   ],
                 'model__var_smoothing': [1e-11 ,1e-10, 1e-9, 1e-8, 1e-7],
-            }
+            },
+            
+            {'reduce_dim': [PCA(5), PCA(10)],
+             'model__var_smoothing': [1e-11 ,1e-10, 1e-9, 1e-8, 1e-7]},
+            
+            {'model__var_smoothing': [1e-11 ,1e-10, 1e-9, 1e-8, 1e-7]}
         ]   
         
         model = GaussianNB()
