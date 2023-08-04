@@ -695,10 +695,10 @@ def perform_unsupervised_learning():
         "Kernel PCA": KernelPCA(n_components=2, kernel="rbf",  gamma=None, fit_inverse_transform=False, alpha=1),
         "Isomap": Isomap(n_components=2, n_neighbors=20, p=1),
 
-        "t-SNE (perplexity: 5)": TSNE(n_components=2, perplexity=5, init="random", n_iter=250, random_state=0),
-        "t-SNE (perplexity: 10)": TSNE(n_components=2, perplexity=10, init="random", n_iter=250, random_state=0),
-        "t-SNE (perplexity: 15)": TSNE(n_components=2, perplexity=15, init="random", n_iter=250, random_state=0),
-        "t-SNE (perplexity: 30)": TSNE(n_components=2, perplexity=30, init="random", n_iter=250, random_state=0),
+        "t-SNE\n(perplexity: 5)": TSNE(n_components=2, perplexity=5, init="random", n_iter=250, random_state=0),
+        "t-SNE\n(perplexity: 10)": TSNE(n_components=2, perplexity=10, init="random", n_iter=250, random_state=0),
+        "t-SNE\n(perplexity: 15)": TSNE(n_components=2, perplexity=15, init="random", n_iter=250, random_state=0),
+        "t-SNE\n(perplexity: 30)": TSNE(n_components=2, perplexity=30, init="random", n_iter=250, random_state=0),
     }
 
     # y = ["bleeders" if val==1 else "non-bleeders" for val in target_series ]
@@ -712,7 +712,7 @@ def perform_unsupervised_learning():
     zorders = [3 if status != "Non-bleeders" else -1 for status in bleeding_since_baseline ]
     markers = ["o" if status != "Non-bleeders" else "o" for status in bleeding_since_baseline ]
     edgecolors = [None if status != "Non-bleeders" else None for status in bleeding_since_baseline ]
-    labels = ["Bleeder" if status != "Non-bleeders" else "Non-bleeder" for status in bleeding_since_baseline ]
+    labels = ["Bleeders" if status != "Non-bleeders" else "Non-bleeders" for status in bleeding_since_baseline ]
 
     def legend_without_duplicate_labels(ax):
         ax.legend( fontsize = 6)
@@ -720,7 +720,7 @@ def perform_unsupervised_learning():
         handles, labels = ax.get_legend_handles_labels()
         unique = [(h, l) for i, (h, l) in enumerate(zip(handles, labels)) if l not in labels[:i]]
         ax.legend(*zip(*unique), loc='lower left', bbox_to_anchor=(0, 1.2, 1, 0.2),
-            ncol=3, mode="expand")
+            ncol=3, mode="expand", fontsize=12)
 
 
     fig = plt.figure(layout="constrained", figsize=(8.3, 5.6))
@@ -741,7 +741,7 @@ def perform_unsupervised_learning():
         ax.get_yaxis().set_visible(False)
         ax.get_xaxis().set_visible(False)
 
-        ax.set_title(method)
+        ax.set_title(method, fontsize=15)
 
     legend_without_duplicate_labels(axsTop[1])
 
@@ -752,8 +752,8 @@ def perform_unsupervised_learning():
     ###################################
     #Perform clusterting using K-means and Agglomerative clustering on all of the dataset
     
-    legend_elements = [Line2D([0], [0], marker='o', color='black', markeredgecolor="black" ,lw=0, markersize=12, label='Non-bleeder'),
-                   Line2D([0], [0], marker='X', color='black', markeredgecolor="yellow",lw=0, label='Bleeder', markersize=12),
+    legend_elements = [Line2D([0], [0], marker='o', color='black', markeredgecolor="black" ,lw=0, markersize=12, label='Non-bleeders'),
+                   Line2D([0], [0], marker='X', color='black', markeredgecolor="yellow",lw=0, label='Bleeders', markersize=12),
                    Patch(facecolor="#f98e09",  label='Cluster 1'),
                    Patch(facecolor="#57106e", label='Cluster 2'),
     ]
@@ -792,12 +792,12 @@ def perform_unsupervised_learning():
         ax.get_yaxis().set_visible(False)
         ax.get_xaxis().set_visible(False)
 
-        ax.text(0.01, 0.99, ha='left', va='top',transform=ax.transAxes,size=8,
+        ax.text(0.01, 0.99, ha='left', va='top',transform=ax.transAxes,size=12,
                 s=f"Homogeneity: {homogeneity_score(target_series ,clusters.labels_):.2e} \nCompleteness: {completeness_score(target_series,clusters.labels_):.2e}")
 
-        ax.set_title(method)
+        ax.set_title(method, fontsize=16)
         
-    axs[1].legend(handles=legend_elements, loc="center left", bbox_to_anchor=(1.04, 0.5))
+    axs[1].legend(handles=legend_elements, loc="center left", bbox_to_anchor=(1.04, 0.5), fontsize=12)
         
     fig.savefig(f"./sklearn_results/Figures/clustering_pic_all_points.pdf",  bbox_inches='tight')  
     ###########################################
@@ -825,9 +825,10 @@ def perform_unsupervised_learning():
 
     ax.get_xaxis().set_visible(False)
 
-    ax.set_ylabel("Distance")
+    ax.set_ylabel("Distance", fontsize=20)
+    ax.yaxis.set_tick_params(labelsize=15)
 
-    ax.text(x=10, y=30, s=f"Cutoff: {max_d}")
+    ax.text(x=10, y=30, s=f"Cutoff: {max_d}", size=13)
 
     fig.savefig(f"./sklearn_results/Figures/agglomerative_clustering_bleeders.pdf",  bbox_inches='tight')  
     ##########
@@ -913,7 +914,7 @@ def perform_unsupervised_learning():
         
         ax.text(text_coord[0], 
             text_coord[1]-0.05*k,
-            feature, color="red", fontsize=10, alpha=0.5)
+            feature, color="red", fontsize=12.5, alpha=0.8)
         
         k += 1
         
