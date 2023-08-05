@@ -276,12 +276,12 @@ def plot_p_value_heatmap(p_value_df, effect_size_df, title, save_path, multitest
     ax.set_title(title)
     ax.set_xlabel(f"{omnibus_p_value}\n{multitest_correction}", labelpad=10)
     
-    fig.savefig(f"{save_path}_{plot_name}_{multitest_correction}.pdf", bbox_inches='tight')
+    fig.savefig(f"{save_path}{plot_name}_{multitest_correction}.pdf", bbox_inches='tight')
     
     
 def main():
-    metric_names = ["Accuracy","Precision","Sensitivity", "AUPRC", "AUROC","F1-score", "Specificity","TN","TP","FN","FP"]
-    modes = ["all_pairs"]#, "ML vs Clinical"]
+    metric_names = ["AUPRC", "AUROC"]
+    modes = ["all_pairs"]
     
     grid_search_results_path = "./sklearn_results/"
     stat_figure_save_path = "./sklearn_results/Figures/"
