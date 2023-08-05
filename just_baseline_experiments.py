@@ -118,6 +118,7 @@ def count_length_of_grid_search():
 
 def generate_metric_pictures():
     
+    #Creates the graphs showing metrics average in 10-fold-nested cv
     def create_graph(ml_data_df, metric_name):
         fig, ax = plt.subplots(figsize=(10.5,5))
         
@@ -128,33 +129,36 @@ def generate_metric_pictures():
         #Set the size of the fonts
         plt.rcParams['xtick.labelsize'] = 8
         plt.rcParams['ytick.labelsize'] = 8
-        plt.rcParams['legend.title_fontsize'] = 18
+        plt.rcParams['legend.title_fontsize'] = 13
 
         #Order the MLs based on the mean of their score
         order = {ml_model:ml_data[ml_data['model']==ml_model]["value"].mean() for ml_model in ml_data['model'].unique()}
         ordered_xlabels = [k for k, v in sorted(order.items(),reverse=True, key=lambda item: item[1])]
 
-        sns.boxplot(data=ml_data, x="model", y="value", ax=ax, linewidth=1, width=0.4, order=ordered_xlabels)
+        sns.boxplot(data=ml_data, x="model", y="value", ax=ax, linewidth=1, color="white", 
+                    flierprops={"marker": None},
+                    boxprops={"edgecolor": "black"},
+                    width=0.4, order=ordered_xlabels)
+        
+        # Change the colirs of whiskers
+        for i, patch in enumerate(ax.patches):
+            for line in ax.lines[i * 6: (i + 1) * 6]:
+                line.set_color("black")
 
-        #Change the transparency of box plot
-        for patch in ax.artists:
-            r, g, b, a = patch.get_facecolor()
-            patch.set_facecolor((r, g, b, .3))
-
-        sns.swarmplot(data=ml_data, x="model", y="value", hue="test_set", ax=ax, size=5, palette="colorblind", order=ordered_xlabels)
+        sns.swarmplot(data=ml_data, x="model", y="value", ax=ax, size=5, color="gray", alpha=0.6, order=ordered_xlabels)
 
         for x_axis, ml_model in enumerate(ordered_xlabels):
             mean = ml_data[ml_data['model']==ml_model]["value"].mean()
             max_value =  ax.get_ylim()[1]
-            ax.text(x_axis-0.35, max_value+(0.02*max_value), s=f"μ={mean:.3f}", size=6)
+            ax.text(x_axis-0.35, max_value+(0.02*max_value), s=f"μ={mean:.2f}", size=8)
 
         # ax.spines["right"].set_visible(False)
         # ax.spines["top"].set_visible(False)
         
         ax.tick_params(axis='x', labelrotation=45)
-        ax.set_title(metric_name, pad=30)
-        ax.set_xlabel("")
-        ax.get_legend().remove()
+        ax.set_title(metric_name, pad=30, fontsize=18)
+        ax.set_xlabel("Models", fontsize=14)
+        ax.set_ylabel("Values", fontsize=14)
         
         xlabel_to_type_dic = {v:all_models[k] for k,v in nice_names.items()}
         
@@ -163,13 +167,16 @@ def generate_metric_pictures():
                 plt.setp(ax.get_xticklabels()[i], color='red')
 
         
-        fig.savefig(f"./sklearn_results/Figures/{metric_name}.png", dpi=300, bbox_inches="tight")
+        fig.savefig(f"./sklearn_results/Figures/{metric_name}.pdf", bbox_inches="tight")
+        fig.savefig(f"./sklearn_results/Figures/{metric_name}.png", dpi=500, bbox_inches="tight")
 
+    #Populate the metrics data into a dic
     all_model_metrics = dict()
 
-    metrics = ["Accuracy","Precision","Sensitivity", "AUPRC", "AUROC","F1-score", "Specificity","TN","TP","FN","FP"]
+    #The metrics of interests
+    metrics = ["AUPRC", "AUROC"]
 
-
+    #Populate the dic
     for model in all_models:
         if all_models[model] == "ML":
 
@@ -189,7 +196,7 @@ def generate_metric_pictures():
 
             all_model_metrics[model] = data
         
-        
+    #Reformat the data into df   
     df_all = pd.DataFrame()
     for model in all_model_metrics.keys():
 
@@ -203,11 +210,54 @@ def generate_metric_pictures():
 
     df_all = df_all.melt(id_vars=['model', "test_set"])
 
+    #For each metric, draw the graphs 
     for metric in metrics:
     
         data = df_all[df_all["variable"]==metric]
         create_graph(data, metric)
+    
+    #############################################################
+    #Draw the best feature selection method
+    feature_selection_counter = dict()
+
+    for model in [model for model in all_models if all_models[model]=="ML" if model != "Dummy"]:
+        with open(f"./sklearn_results/{model}_nested_cv_results.pickle", 'rb') as handle:
+            nested_score = pickle.load(handle)
+            
+        model = nice_names[model]
         
+        feature_selection_counter[model] = {"PCA":0, "SelectFromModel":0, "None":0}
+        
+        for i in range(len(nested_score['estimator'])):
+            est1 = nested_score['estimator'][i]
+            feature_selection_method = est1.best_estimator_.steps[1][1]
+            reduce_dim_method = est1.best_estimator_.steps[2][1]
+        
+            if feature_selection_method == reduce_dim_method: #Means both are passthrough, and no reduction in # of features occured
+                feature_selection_counter[model]["None"] += 1
+            elif reduce_dim_method != "passthrough": #Means PCA has occured
+                feature_selection_counter[model]["PCA"] += 1
+            else:#Means Select from model occured
+                feature_selection_counter[model]["SelectFromModel"] += 1
+            
+    fig, ax = plt.subplots(figsize=(8, 4))
+    
+
+    feat_select_df = pd.DataFrame.from_dict(feature_selection_counter).T
+    feat_select_df["model"] = feat_select_df.index
+    feat_select_df = feat_select_df.melt(id_vars ="model", value_vars=["PCA", "SelectFromModel", "None"], var_name="method")
+
+    sns.barplot(data=feat_select_df, x="model", y="value", hue="method", ax=ax, palette="icefire", width=0.6)
+    ax.legend(bbox_to_anchor=(0.5, 0.85), loc='center left')
+    ax.set_xlabel("Models", fontsize=14)
+    ax.set_ylabel("Counts", fontsize=14)
+    
+    ax.xaxis.set_tick_params(labelsize=10)
+    ax.yaxis.set_tick_params(labelsize=10)
+
+    fig.savefig(f"./sklearn_results/Figures/best_selection_methods.pdf", bbox_inches="tight")
+    fig.savefig(f"./sklearn_results/Figures/best_selection_methods.png", dpi=300, bbox_inches="tight")
+            
 
 
 def get_param_grid_model(classifier):
