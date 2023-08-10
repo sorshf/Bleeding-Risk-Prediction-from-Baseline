@@ -944,11 +944,11 @@ class Dataset():
             if patient.GENOTYPE is None:
                 filled_genotype_data = np.insert(genotype_mode, 0, patient.uniqid, axis=0)
                 filled_genotype_data = np.append(filled_genotype_data, [1], axis=0)
-                patient.GENOTYPE = pd.DataFrame(filled_genotype_data.reshape(1, len(filled_genotype_data)), columns= list(genotype_df.columns)+["missing_genoype"])        
+                patient.GENOTYPE = pd.DataFrame(filled_genotype_data.reshape(1, len(filled_genotype_data)), columns= list(genotype_df.columns)+["missing-genoype"])        
             else:
                 filled_genotype_data = patient.GENOTYPE.to_numpy().flatten()
                 filled_genotype_data = np.append(filled_genotype_data, [0], axis=0)
-                patient.GENOTYPE = pd.DataFrame(filled_genotype_data.reshape(1, len(filled_genotype_data)), columns= list(genotype_df.columns)+["missing_genoype"])
+                patient.GENOTYPE = pd.DataFrame(filled_genotype_data.reshape(1, len(filled_genotype_data)), columns= list(genotype_df.columns)+["missing-genoype"])
 
     def get_genotype_data(self):
         if not self.missing_genotypes_filled:
