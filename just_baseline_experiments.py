@@ -117,6 +117,10 @@ def count_length_of_grid_search():
         
 
 def generate_metric_pictures():
+    #Set the size of the fonts
+    plt.rcParams['xtick.labelsize'] = 10
+    plt.rcParams['ytick.labelsize'] = 10
+    plt.rcParams['legend.title_fontsize'] = 13
     
     #Creates the graphs showing metrics average in 10-fold-nested cv
     def create_graph(ml_data_df, metric_name):
@@ -125,11 +129,6 @@ def generate_metric_pictures():
         ml_data = ml_data_df.copy()
         
         ml_data.loc[:,"model"] = ml_data["model"].apply(lambda x:nice_names[x])
-
-        #Set the size of the fonts
-        plt.rcParams['xtick.labelsize'] = 8
-        plt.rcParams['ytick.labelsize'] = 8
-        plt.rcParams['legend.title_fontsize'] = 13
 
         #Order the MLs based on the mean of their score
         order = {ml_model:ml_data[ml_data['model']==ml_model]["value"].mean() for ml_model in ml_data['model'].unique()}
@@ -156,9 +155,9 @@ def generate_metric_pictures():
         # ax.spines["top"].set_visible(False)
         
         ax.tick_params(axis='x', labelrotation=45)
-        ax.set_title(metric_name, pad=30, fontsize=18)
-        ax.set_xlabel("Models", fontsize=14)
-        ax.set_ylabel("Values", fontsize=14)
+        #ax.set_title(metric_name, pad=30, fontsize=18)
+        ax.set_xlabel("", fontsize=14)
+        ax.set_ylabel(f"{metric_name}", fontsize=15)
         
         xlabel_to_type_dic = {v:all_models[k] for k,v in nice_names.items()}
         
@@ -226,7 +225,7 @@ def generate_metric_pictures():
             
         model = nice_names[model]
         
-        feature_selection_counter[model] = {"PCA":0, "SelectFromModel":0, "None":0}
+        feature_selection_counter[model] = {"PCA":0, "SFS":0, "None":0}
         
         for i in range(len(nested_score['estimator'])):
             est1 = nested_score['estimator'][i]
@@ -238,14 +237,14 @@ def generate_metric_pictures():
             elif reduce_dim_method != "passthrough": #Means PCA has occured
                 feature_selection_counter[model]["PCA"] += 1
             else:#Means Select from model occured
-                feature_selection_counter[model]["SelectFromModel"] += 1
+                feature_selection_counter[model]["SFS"] += 1
             
     fig, ax = plt.subplots(figsize=(8, 4))
     
 
     feat_select_df = pd.DataFrame.from_dict(feature_selection_counter).T
     feat_select_df["model"] = feat_select_df.index
-    feat_select_df = feat_select_df.melt(id_vars ="model", value_vars=["PCA", "SelectFromModel", "None"], var_name="method")
+    feat_select_df = feat_select_df.melt(id_vars ="model", value_vars=["PCA", "SFS", "None"], var_name="method")
 
     sns.barplot(data=feat_select_df, x="model", y="value", hue="method", ax=ax, palette="icefire", width=0.6)
     ax.legend(bbox_to_anchor=(0.5, 0.85), loc='center left')
@@ -682,7 +681,12 @@ def perform_unsupervised_learning():
     #Function to get the full (descriptive) name of the features
     def get_long_name(abb_to_long_dictionary, col):
         if "_" in col:
-            return abb_to_long_dictionary[col.split("_")[0]]+"-"+col.split("_")[1]
+            if len([c for c in col if c=="_"])==1:
+                return abb_to_long_dictionary[col.split("_")[0]]+"-"+col.split("_")[1]
+            else:
+                prefix = col[0:col.rfind("_")]
+                suffix = col[col.rfind("_")+1:]
+                return abb_to_long_dictionary[prefix]+"-"+suffix
         elif col in abb_to_long_dictionary:
             return abb_to_long_dictionary[col]
         else:
@@ -707,13 +711,17 @@ def perform_unsupervised_learning():
 
     #Change the names of the columns in the baseline data to make them compatible with the clinical score
     abb_to_long_dic = get_abb_to_long_dic(instructions_dir=instruction_dir, CRF_name="BASELINE")
+    abb_to_long_dic["years-since-anticoag"] = "Years since start of anticoagulation"
     baseline_dataframe.columns = [get_long_name(abb_to_long_dic, col) for col in baseline_dataframe.columns]
 
+    #Change the names of the columns in the genotype data
+    abb_to_long_dic = get_abb_to_long_dic(instructions_dir=instruction_dir, CRF_name="GENOTYPE")
+    genotype_data.columns = [get_long_name(abb_to_long_dic, col) for col in genotype_data.columns]
 
     #Concat the Baseline and Genotype data
     concat_x = baseline_dataframe.join(genotype_data)
     
-    
+     
     ###########################
     #Calculate the time since bleeding from baseline and categorize patients
     
@@ -809,6 +817,7 @@ def perform_unsupervised_learning():
     legend_without_duplicate_labels(axsTop[1])
 
     fig.savefig(f"./sklearn_results/Figures/dimentionality_reduction_all.pdf",  bbox_inches='tight')  
+    fig.savefig(f"./sklearn_results/Figures/dimentionality_reduction_all.png", dpi=500, bbox_inches='tight')  
 
     ####################################
     
@@ -863,6 +872,7 @@ def perform_unsupervised_learning():
     axs[1].legend(handles=legend_elements, loc="center left", bbox_to_anchor=(1.04, 0.5), fontsize=12)
         
     fig.savefig(f"./sklearn_results/Figures/clustering_pic_all_points.pdf",  bbox_inches='tight')  
+    fig.savefig(f"./sklearn_results/Figures/clustering_pic_all_points.png", dpi=500,  bbox_inches='tight')  
     ###########################################
     
     #######################################
@@ -894,6 +904,7 @@ def perform_unsupervised_learning():
     ax.text(x=10, y=30, s=f"Cutoff: {max_d}", size=13)
 
     fig.savefig(f"./sklearn_results/Figures/agglomerative_clustering_bleeders.pdf",  bbox_inches='tight')  
+    fig.savefig(f"./sklearn_results/Figures/agglomerative_clustering_bleeders.png", dpi=500,  bbox_inches='tight')  
     ##########
     
     ###################
@@ -938,6 +949,10 @@ def perform_unsupervised_learning():
     
     #Extract the top three highest and lowest for each principle component
     loadings_copy = loadings.copy()
+    
+    #Remove the feature "Factor V Leiden-Heterozygote" because it is a duplicate with Factor V Leiden-heterozygous mutant
+    loadings_copy = loadings_copy.drop("Factor V Leiden-Heterozygote", axis=0)
+    
     three_highest_pc1 = loadings_copy.sort_values(by="PC1", ascending=False)[0:3]
     three_lowest_pc1 = loadings_copy.sort_values(by="PC1", ascending=True)[0:3]
     three_highest_pc2 = loadings_copy.sort_values(by="PC2", ascending=False)[0:3]
@@ -986,6 +1001,7 @@ def perform_unsupervised_learning():
     ax.set_xlim(-0.65, 0.8)
 
     fig.savefig(f"./sklearn_results/Figures/PCA_of_bleeders_with_loadings.pdf",  bbox_inches='tight')  
+    fig.savefig(f"./sklearn_results/Figures/PCA_of_bleeders_with_loadings.png", dpi=500, bbox_inches='tight')  
     ########################
     
     
