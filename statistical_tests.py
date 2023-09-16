@@ -8,14 +8,13 @@
 # Imports
 
 from pingouin.effsize import compute_effsize
-from scipy.stats import wilcoxon
 from statsmodels.stats import multitest
 import matplotlib.pyplot as plt
 from matplotlib import colors
 import numpy as np
 import pandas as pd
 import seaborn as sns
-from scipy.stats import friedmanchisquare, wilcoxon
+from scipy.stats import friedmanchisquare, wilcoxon, f_oneway
 from just_baseline_experiments import all_models
 import pickle
 import matplotlib.ticker as ticker
@@ -58,28 +57,62 @@ def get_grid_search_results(folder_name):
             
     return all_model_metrics
     
-def omnibus_test(all_metrics_dic, metric_name, alpha=0.05):
-    """Performs omnibus test (Friedman Chi Square) on a dictionary of results.
+def omnibus_test(all_metrics_dic, metric_name, method, alpha=0.05):
+    """Performs omnibus test (Either Friedman or ANOVA) on a dictionary of results.
 
     Args:
         all_metrics_dic (dic): A dictionary of where keys are models and values are the metrics measured after grid search.
         metric_name (str): The name of the metric we are testing
+        method (str): Either non-parametric "Friedman", or parametric "ANOVA".
         alpha (float, optional): Alpha value for statistical tests. Defaults to 0.05.
 
     Returns:
         str: String description of the result of the omnibus test.
     """
     metric_values = [all_metrics_dic[model_name][metric_name] for model_name in all_metrics_dic.keys()]
- 
-    friedman_stat, friedman_p_value = friedmanchisquare(*metric_values)
     
-    significance = "SIGNIFICANT" if friedman_p_value<alpha else "NOT significant"
+    if method == "Friedman":
+        _, p_value = friedmanchisquare(*metric_values)
+    elif method == "ANOVA":
+        _, p_value = f_oneway(*metric_values)
+    else:
+        KeyError(f"The name {method} doesn't exist in fxn definition.")
     
-    string=f"The friedman p-value is {significance} for {metric_name} across {len(metric_values)} models: {friedman_p_value:.2e}"
+    significance = "SIGNIFICANT" if p_value<alpha else "NOT significant"
+    
+    string=f"The {method} p-value is {significance} for {metric_name} across {len(metric_values)} models: {p_value:.2e}"
     
     print(string)
     
     return string
+
+def test_omnibus_test_fxn():
+    """Test the omnibus_test function.
+    """
+    my_dic = {"tillamook" : {"test" :[0.0571, 0.0813, 0.0831, 0.0976, 0.0817, 0.0859, 0.0735,
+             0.0659, 0.0923, 0.0836]},
+            "newport" : {"test" :[0.0873, 0.0662, 0.0672, 0.0819, 0.0749, 0.0649, 0.0835,
+                    0.0725]},
+            "petersburg" : {"test" :[0.0974, 0.1352, 0.0817, 0.1016, 0.0968, 0.1064, 0.105]},
+            "magadan" : {"test" :[0.1033, 0.0915, 0.0781, 0.0685, 0.0677, 0.0697, 0.0764,
+                    0.0689]},
+            "tvarminne" : {"test" :[0.0703, 0.1026, 0.0956, 0.0973, 0.1039, 0.1045]}}
+    
+    omnibus_test(my_dic, metric_name="test", method="ANOVA", alpha=0.05)
+    print("ANOVA results should be pvalue=0.0002812242314534544")
+    
+    print("\n")
+    
+    
+    my_dic = {
+        "before" : {"test" :[72, 96, 88, 92, 74, 76, 82]},
+        "immediately_after" : {"test" :[120, 120, 132, 120, 101, 96, 112]},
+        "five_min_after" : {"test" :[76, 95, 104, 96, 84, 72, 76]}
+    }
+    
+    
+    omnibus_test(my_dic, metric_name="test", method="Friedman", alpha=0.05)
+    print("Friedman results should be pvalue=0.005063414171757498")
     
 def calc_effect_size(all_metrics_dic, metric_name, mode):
     """Calculates the effect size (Hedges g test) of the models performance.
