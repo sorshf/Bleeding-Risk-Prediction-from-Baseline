@@ -9,12 +9,13 @@
 
 from pingouin.effsize import compute_effsize
 from statsmodels.stats import multitest
+from statsmodels.stats.anova import AnovaRM
 import matplotlib.pyplot as plt
 from matplotlib import colors
 import numpy as np
 import pandas as pd
 import seaborn as sns
-from scipy.stats import friedmanchisquare, wilcoxon, f_oneway, ttest_rel
+from scipy.stats import friedmanchisquare, wilcoxon, ttest_rel
 from just_baseline_experiments import all_models
 import pickle
 import matplotlib.ticker as ticker
@@ -58,7 +59,7 @@ def get_grid_search_results(folder_name):
     return all_model_metrics
     
 def omnibus_test(all_metrics_dic, metric_name, method, alpha=0.05):
-    """Performs omnibus test (Either Friedman or ANOVA) on a dictionary of results.
+    """Performs omnibus test (Either Friedman or oneway repeated-measure ANOVA) on a dictionary of results.
 
     Args:
         all_metrics_dic (dic): A dictionary of where keys are models and values are the metrics measured after grid search.
@@ -74,7 +75,25 @@ def omnibus_test(all_metrics_dic, metric_name, method, alpha=0.05):
     if method == "Friedman":
         _, p_value = friedmanchisquare(*metric_values)
     elif method == "ANOVA":
-        _, p_value = f_oneway(*metric_values)
+        #Get the value of the metrics for all clfs for all cv folds in order
+        the_metric_values = [item for model in all_metrics_dic for item in all_metrics_dic[model][metric_name]] 
+
+        #Number of cross validation 
+        num_cv = len(list(list(all_metrics_dic.values())[0].values())[0])
+
+        #Get the names of the clfs in order
+        the_clf_names = [item for clf_name in all_metrics_dic for item in [clf_name]*num_cv]
+
+        data_df = pd.DataFrame({
+            'clf_name': the_clf_names,
+            'fold_cv' : list(range(1, num_cv+1))*len(set(the_clf_names)),
+            'metric_value' : the_metric_values
+        })
+
+        one_way_repeated_measure_anova = AnovaRM(data=data_df, depvar='metric_value',
+                    subject='clf_name', within=['fold_cv']).fit()
+
+        p_value = one_way_repeated_measure_anova.anova_table["Pr > F"].values[0]
     else:
         KeyError(f"The name {method} doesn't exist in fxn definition.")
     
@@ -326,18 +345,18 @@ def main():
     modes = ["all_pairs","ML vs Clinical"]
     
     grid_search_results_path = "./sklearn_results/"
-    stat_figure_save_path = "./sklearn_results/Figures/parametric/"
+    stat_figure_save_path = "./sklearn_results/Figures/"
 
     for mode in modes:
         for metric_name in metric_names:
 
             all_model_metrics = get_grid_search_results(grid_search_results_path)
 
-            omnibus_results = omnibus_test(all_model_metrics, metric_name, method="Friedman")
+            omnibus_results = omnibus_test(all_model_metrics, metric_name, method="ANOVA")
 
             effect_df = calc_effect_size(all_model_metrics, metric_name=metric_name, mode=mode)    
 
-            stat_df = calc_pairwise_p_value(all_model_metrics, metric_name=metric_name, method="Wilcoxon signed-rank test", mode=mode)
+            stat_df = calc_pairwise_p_value(all_model_metrics, metric_name=metric_name, method="Paired t-test", mode=mode)
 
             stat_df_corrected, multitest_used = correct_p_values(stat_df, multitest_correction="fdr_bh")
 
