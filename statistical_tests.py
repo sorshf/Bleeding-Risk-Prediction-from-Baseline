@@ -14,7 +14,7 @@ from matplotlib import colors
 import numpy as np
 import pandas as pd
 import seaborn as sns
-from scipy.stats import friedmanchisquare, wilcoxon, f_oneway
+from scipy.stats import friedmanchisquare, wilcoxon, f_oneway, ttest_rel
 from just_baseline_experiments import all_models
 import pickle
 import matplotlib.ticker as ticker
@@ -146,12 +146,13 @@ def calc_effect_size(all_metrics_dic, metric_name, mode):
                 
     return eff_size_results
 
-def calc_pairwise_p_value(all_metrics_dic, metric_name, mode):
-    """Calculates the pairwise wilcoxon on the performances of the models.
+def calc_pairwise_p_value(all_metrics_dic, metric_name, method, mode):
+    """Calculates the pairwise wilcoxon sign-rank or paired t-test on the performances of the models.
 
     Args:
         all_metrics_dic (dict): A dictionary of where keys are models and values are the metrics measured after grid search.
         metric_name (str): The metric that is being tested from the dict data.
+        method (str): Either "Wilcoxon signed-rank test" or "Paired t-test".
         mode (str): "all_pairs": comapres all pairwise combinations; or "ML vs Clinical":compared ML models with Clinical
 
     Returns:
@@ -167,9 +168,17 @@ def calc_pairwise_p_value(all_metrics_dic, metric_name, mode):
         for model_2 in stat_test_results.columns:
             if model_1 != model_2:
                 try:
-                    statistic, p_value = wilcoxon(all_metrics_dic[model_1][metric_name], 
-                                                all_metrics_dic[model_2][metric_name],
-                                                )
+                    if method == "Wilcoxon signed-rank test":
+                        statistic, p_value = wilcoxon(all_metrics_dic[model_1][metric_name], 
+                                                    all_metrics_dic[model_2][metric_name],
+                                                    )
+                    elif method == "Paired t-test":
+                        statistic, p_value = ttest_rel(all_metrics_dic[model_1][metric_name], 
+                                                    all_metrics_dic[model_2][metric_name],
+                                                    )
+                    else:
+                        KeyError(f"The method {method} does not exist.")
+                                                
                 except ValueError as e:
                     p_value = 1.00
                     
@@ -317,20 +326,20 @@ def main():
     modes = ["all_pairs","ML vs Clinical"]
     
     grid_search_results_path = "./sklearn_results/"
-    stat_figure_save_path = "./sklearn_results/Figures/"
+    stat_figure_save_path = "./sklearn_results/Figures/parametric/"
 
     for mode in modes:
         for metric_name in metric_names:
 
             all_model_metrics = get_grid_search_results(grid_search_results_path)
 
-            omnibus_results = omnibus_test(all_model_metrics, metric_name)
+            omnibus_results = omnibus_test(all_model_metrics, metric_name, method="Friedman")
 
             effect_df = calc_effect_size(all_model_metrics, metric_name=metric_name, mode=mode)    
 
-            stat_df = calc_pairwise_p_value(all_model_metrics, metric_name=metric_name, mode=mode)
+            stat_df = calc_pairwise_p_value(all_model_metrics, metric_name=metric_name, method="Wilcoxon signed-rank test", mode=mode)
 
-            stat_df_corrected, multitest_used = correct_p_values(stat_df, multitest_correction="bonferroni")
+            stat_df_corrected, multitest_used = correct_p_values(stat_df, multitest_correction="fdr_bh")
 
             plot_p_value_heatmap(stat_df_corrected, effect_size_df=effect_df, title=metric_name, 
                                  save_path = stat_figure_save_path,
