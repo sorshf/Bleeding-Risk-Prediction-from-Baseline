@@ -263,10 +263,10 @@ def generate_metric_pictures():
             
 
 
-def get_param_grid_model(classifier):
+def get_param_grid_model(classifier, joblib_memory_path = None):
     
     #Params for sequential feature selection
-    sfs_scoring = "average_precision"
+    sfs_scoring = "roc_auc"
     sfs_cv = 3
 
     #Params for grid search
@@ -531,7 +531,7 @@ def get_param_grid_model(classifier):
     
     #In order to reduce redundancy in code, we add the proprocessing beforehand.
     for item in param_grid:
-        item['preprocess'] = [StandardScaler()]
+        item['preprocess'] = [StandardScaler(), MinMaxScaler()]
 
                                       
         
@@ -539,12 +539,12 @@ def get_param_grid_model(classifier):
                      ('feature_selection', 'passthrough'),
                     ('reduce_dim','passthrough'),
                     ('model', model)],
-                    memory="$SLURM_TMPDIR")
+                    memory=joblib_memory_path)
     
     return pipe, param_grid
 
 
-def perform_nested_cv(model, X, y):
+def perform_nested_cv(model, X, y, joblib_memory_path = None):
     
     #Custom Scores
     tn_score = make_scorer(my_custom_metrics, greater_is_better=True, metric="tn")
@@ -559,14 +559,14 @@ def perform_nested_cv(model, X, y):
     target_series_duplicate = y.copy()
     
     inner_cv = StratifiedKFold(n_splits=3, shuffle=True, random_state=1)
-    outer_cv = StratifiedKFold(n_splits=10, shuffle=True, random_state=1)
+    outer_cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=1)
     
     print(f'Started performing nested cv for {model}')
     start_time = time.time()
     
     if all_models[model] == "ML":
         
-        pipe, param_grid = get_param_grid_model(model)
+        pipe, param_grid = get_param_grid_model(model, joblib_memory_path)
 
 
 
@@ -641,7 +641,7 @@ def perform_nested_cv(model, X, y):
     print(model, "is done in", f'{time.time()-start_time}', "seconds.")
 
 
-def main(mode):
+def main(mode, joblib_memory_path=None):
     #Read the patient dataset
     patient_dataset = prepare_patient_dataset(data_dir, instruction_dir, discrepency_dir)
 
@@ -671,9 +671,9 @@ def main(mode):
     #Perform nested cv
     if mode == "all_models":
         for model in all_models:
-            perform_nested_cv(model, concat_x, target_series)
+            perform_nested_cv(model, concat_x, target_series, joblib_memory_path)
     elif mode in all_models.keys():
-        perform_nested_cv(mode, concat_x, target_series)
+        perform_nested_cv(mode, concat_x, target_series, joblib_memory_path)
     elif mode == "test":
         print("Data preparation was finished succesfully.")
     else:
@@ -1126,8 +1126,21 @@ def perform_unsupervised_learning():
     
     
 if __name__=="__main__":
-    if sys.argv[1] == "experiment":
-        main(sys.argv[2])
+    """
+    - To perform supervised analysis:
+        Option 1 (no Temp directory to save Scikit-learn models): 
+            python just_baseline_experiments.py experiment {all_models; MODEL_NAME}
+        Option 2 (with temp directory)
+            python just_baseline_experiments.py experiment {all_models; MODEL_NAME} TMP_directory
+    """
+
+    if (sys.argv[1] == "experiment"):
+        if (len(sys.argv) == 4):
+            print(f"The temp directory is set to: {sys.argv[3]}")
+            main(sys.argv[2], sys.argv[3])
+        else:
+            print("No temp directory will be used.")
+            main(sys.argv[2])
     elif sys.argv[1] == 'calc_grid_space':
         count_length_of_grid_search()
     elif sys.argv[1] == 'generate_pictures_metrics':
