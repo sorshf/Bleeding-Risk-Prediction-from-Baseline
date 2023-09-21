@@ -88,6 +88,89 @@ nice_names = {
     "Dummy":"Dummy",
 }
 
+def get_baseline_x_y_formatted():
+    """Get the x and y of the baseline data. Remove the features with more than 10% unknown.
+
+    Returns:
+        (Dataset, pd.DataFrame, pd.Series): patient_dataset, concat_x, target_series
+    """
+    #Function to get the full (descriptive) name of the features
+    def get_long_name(abb_to_long_dictionary, col):
+        def place_space_before_capitalized_str(sentence):
+            new_string = ""
+            for i, char in enumerate(sentence):
+                if (char.isupper() & (sentence[i-1] != " ") & (~sentence[i-1].isupper()) & (~sentence[i-1].isdigit()) & (sentence[i-1] != "(") & (i!=0)):
+                    new_string = new_string + " " + char
+                else:
+                    new_string = new_string + char
+            return re.sub("\s+", " ", new_string)
+        
+        if "_" in col:
+            if len([c for c in col if c=="_"])==1:
+                return place_space_before_capitalized_str(abb_to_long_dictionary[col.split("_")[0]]+f" ({col.split('_')[1]})")
+            else:
+                prefix = col[0:col.rfind("_")]
+                suffix = col[col.rfind("_")+1:]
+                return place_space_before_capitalized_str(abb_to_long_dictionary[prefix]+f" ({suffix})")
+        elif col in abb_to_long_dictionary:
+            return abb_to_long_dictionary[col]
+        else:
+            return col
+        
+    #Read the patient dataset
+    patient_dataset = prepare_patient_dataset(data_dir, instruction_dir, discrepency_dir)
+
+    #Remove patients without baseline, remove the FUPS after bleeding/termination, fill FUP data for those without FUP data
+    patient_dataset.filter_patients_sequentially(mode="fill_patients_without_FUP")
+    print(patient_dataset.get_all_targets_counts(), "\n")
+
+    #Add one feature to each patient indicating year since baseline to each FUP
+    patient_dataset.add_FUP_since_baseline()
+
+    #Get the BASELINE, and Follow-up data from patient dataset
+    _, _, baseline_dataframe, target_series = patient_dataset.get_data_x_y(baseline_filter=["uniqid", "dtbas", "vteindxdt", "stdyoatdt"], 
+                                                                                                FUP_filter=[])
+
+    #Get the genotype data
+    genotype_data = patient_dataset.get_genotype_data()
+
+    #Change the names of the columns in the baseline data to make them compatible with the clinical score
+    abb_to_long_dic = get_abb_to_long_dic(instructions_dir=instruction_dir, CRF_name="BASELINE")
+    abb_to_long_dic["years-since-anticoag"] = "Years since start of anticoagulation"
+    abb_to_long_dic["bmi"] = "BMI"
+    baseline_dataframe.columns = [get_long_name(abb_to_long_dic, col) for col in baseline_dataframe.columns]
+
+    #Change the names of the columns in the genotype data
+    abb_to_long_dic = get_abb_to_long_dic(instructions_dir=instruction_dir, CRF_name="GENOTYPE")
+    genotype_data.columns = [get_long_name(abb_to_long_dic, col) for col in genotype_data.columns]
+
+    #Concat the Baseline and Genotype data
+    concat_x = baseline_dataframe.join(genotype_data)
+    
+    ############################
+    #Removing the features with more than 10% unknown
+    bad_features = []
+    for feature_name in concat_x.columns:
+        if ("known" in feature_name):
+            percent_missing = concat_x[feature_name].sum()/len(concat_x)*100
+            if percent_missing > 10:
+                feature_name_prefix = feature_name.split("(")[0]
+                for feat_nam in concat_x.columns:
+                    if feature_name_prefix in feat_nam:
+                        bad_features.append(feat_nam)
+
+    print("The length of features in X before removing features with many unknowns is:", len(concat_x.columns))
+    
+    concat_x = concat_x.drop(bad_features, axis=1)
+    
+    print(f" Features with many unknowns to be removed: {bad_features}")
+
+    
+    print("The length of features in X after removing features with many unknowns is:", len(concat_x.columns))
+
+    return patient_dataset, concat_x, target_series
+
+
 def my_custom_metrics(y_true, y_pred, metric):
     tn, fp, fn, tp = confusion_matrix(y_true, y_pred).ravel()
     if metric == "tp":
@@ -642,30 +725,8 @@ def perform_nested_cv(model, X, y, joblib_memory_path = None):
 
 
 def main(mode, joblib_memory_path=None):
-    #Read the patient dataset
-    patient_dataset = prepare_patient_dataset(data_dir, instruction_dir, discrepency_dir)
-
-    #Remove patients without baseline, remove the FUPS after bleeding/termination, fill FUP data for those without FUP data
-    patient_dataset.filter_patients_sequentially(mode="fill_patients_without_FUP")
-    print(patient_dataset.get_all_targets_counts(), "\n")
-
-    #Add one feature to each patient indicating year since baseline to each FUP
-    patient_dataset.add_FUP_since_baseline()
-
-    #Get the BASELINE, and Follow-up data from patient dataset
-    _, _, baseline_dataframe, target_series = patient_dataset.get_data_x_y(baseline_filter=["uniqid", "dtbas", "vteindxdt", "stdyoatdt"], 
-                                                                                                FUP_filter=[])
-    
-    #Get the genotype data
-    genotype_data = patient_dataset.get_genotype_data()
-
-    #Change the names of the columns in the baseline data to make them compatible with the clinical score
-    abb_to_long_dic = get_abb_to_long_dic(instructions_dir=instruction_dir, CRF_name="BASELINE")
-    baseline_dataframe.columns = [abb_to_long_dic[col] if col in abb_to_long_dic else col for col in baseline_dataframe.columns]
-    
-
-    #Concat the Baseline and Genotype data
-    concat_x = baseline_dataframe.join(genotype_data)
+    #Get the Baseline dataset formatted
+    _, concat_x, target_series = get_baseline_x_y_formatted()
 
 
     #Perform nested cv
@@ -682,79 +743,8 @@ def main(mode, joblib_memory_path=None):
 
 def perform_unsupervised_learning():
     
-    #Function to get the full (descriptive) name of the features
-    def get_long_name(abb_to_long_dictionary, col):
-        def place_space_before_capitalized_str(sentence):
-            new_string = ""
-            for i, char in enumerate(sentence):
-                if (char.isupper() & (sentence[i-1] != " ") & (~sentence[i-1].isupper()) & (~sentence[i-1].isdigit()) & (sentence[i-1] != "(") & (i!=0)):
-                    new_string = new_string + " " + char
-                else:
-                    new_string = new_string + char
-            return re.sub("\s+", " ", new_string)
-        
-        if "_" in col:
-            if len([c for c in col if c=="_"])==1:
-                return place_space_before_capitalized_str(abb_to_long_dictionary[col.split("_")[0]]+f" ({col.split('_')[1]})")
-            else:
-                prefix = col[0:col.rfind("_")]
-                suffix = col[col.rfind("_")+1:]
-                return place_space_before_capitalized_str(abb_to_long_dictionary[prefix]+f" ({suffix})")
-        elif col in abb_to_long_dictionary:
-            return abb_to_long_dictionary[col]
-        else:
-            return col
-        
-    #Read the patient dataset
-    patient_dataset = prepare_patient_dataset(data_dir, instruction_dir, discrepency_dir)
-
-    #Remove patients without baseline, remove the FUPS after bleeding/termination, fill FUP data for those without FUP data
-    patient_dataset.filter_patients_sequentially(mode="fill_patients_without_FUP")
-    print(patient_dataset.get_all_targets_counts(), "\n")
-
-    #Add one feature to each patient indicating year since baseline to each FUP
-    patient_dataset.add_FUP_since_baseline()
-
-    #Get the BASELINE, and Follow-up data from patient dataset
-    _, _, baseline_dataframe, target_series = patient_dataset.get_data_x_y(baseline_filter=["uniqid", "dtbas", "vteindxdt", "stdyoatdt"], 
-                                                                                                FUP_filter=[])
-
-    #Get the genotype data
-    genotype_data = patient_dataset.get_genotype_data()
-
-    #Change the names of the columns in the baseline data to make them compatible with the clinical score
-    abb_to_long_dic = get_abb_to_long_dic(instructions_dir=instruction_dir, CRF_name="BASELINE")
-    abb_to_long_dic["years-since-anticoag"] = "Years since start of anticoagulation"
-    abb_to_long_dic["bmi"] = "BMI"
-    baseline_dataframe.columns = [get_long_name(abb_to_long_dic, col) for col in baseline_dataframe.columns]
-
-    #Change the names of the columns in the genotype data
-    abb_to_long_dic = get_abb_to_long_dic(instructions_dir=instruction_dir, CRF_name="GENOTYPE")
-    genotype_data.columns = [get_long_name(abb_to_long_dic, col) for col in genotype_data.columns]
-
-    #Concat the Baseline and Genotype data
-    concat_x = baseline_dataframe.join(genotype_data)
-    
-    ############################
-    #Removing the features with more than 10% unknown
-    bad_features = []
-    for feature_name in concat_x.columns:
-        if ("known" in feature_name):
-            percent_missing = concat_x[feature_name].sum()/len(concat_x)*100
-            if percent_missing > 10:
-                feature_name_prefix = feature_name.split("(")[0]
-                for feat_nam in concat_x.columns:
-                    if feature_name_prefix in feat_nam:
-                        bad_features.append(feat_nam)
-
-    print("The length of features in X before removing features with many unknowns is:", len(concat_x.columns))
-    
-    concat_x = concat_x.drop(bad_features, axis=1)
-    
-    print(f" Features with many unknowns to be removed: {bad_features}")
-
-    
-    print("The length of features in X after removing features with many unknowns is:", len(concat_x.columns))
+    #Get the Baseline dataset formatted
+    patient_dataset, concat_x, target_series = get_baseline_x_y_formatted()
 
      
     ###########################
