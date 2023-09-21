@@ -88,8 +88,12 @@ nice_names = {
     "Dummy":"Dummy",
 }
 
-def get_baseline_x_y_formatted():
-    """Get the x and y of the baseline data. Remove the features with more than 10% unknown.
+def get_baseline_x_y_formatted(mode):
+    """Get the x and y of the baseline data.
+    
+    Args:
+        mode (str): "Raw": keep all the features and their slightly modify their names (for predefined Clinical models)
+                    "Formatted": Remove the features with more than 10% unknown, and format their name (for new ML models ).
 
     Returns:
         (Dataset, pd.DataFrame, pd.Series): patient_dataset, concat_x, target_series
@@ -134,30 +138,38 @@ def get_baseline_x_y_formatted():
     #Get the genotype data
     genotype_data = patient_dataset.get_genotype_data()
 
-    #Change the names of the columns in the baseline data to make them compatible with the clinical score
-    abb_to_long_dic = get_abb_to_long_dic(instructions_dir=instruction_dir, CRF_name="BASELINE")
-    abb_to_long_dic["years-since-anticoag"] = "Years since start of anticoagulation"
-    abb_to_long_dic["bmi"] = "BMI"
-    baseline_dataframe.columns = [get_long_name(abb_to_long_dic, col) for col in baseline_dataframe.columns]
+    if mode == "Formatted":
+        #Change the names of the columns in the baseline data to make them compatible with the clinical score
+        abb_to_long_dic = get_abb_to_long_dic(instructions_dir=instruction_dir, CRF_name="BASELINE")
+        abb_to_long_dic["years-since-anticoag"] = "Years since start of anticoagulation"
+        abb_to_long_dic["bmi"] = "BMI"
+        baseline_dataframe.columns = [get_long_name(abb_to_long_dic, col) for col in baseline_dataframe.columns]
 
-    #Change the names of the columns in the genotype data
-    abb_to_long_dic = get_abb_to_long_dic(instructions_dir=instruction_dir, CRF_name="GENOTYPE")
-    genotype_data.columns = [get_long_name(abb_to_long_dic, col) for col in genotype_data.columns]
-
+        #Change the names of the columns in the genotype data
+        abb_to_long_dic = get_abb_to_long_dic(instructions_dir=instruction_dir, CRF_name="GENOTYPE")
+        genotype_data.columns = [get_long_name(abb_to_long_dic, col) for col in genotype_data.columns]
+    elif mode == "Raw":
+        #Change the names of the columns in the baseline data to make them compatible with the clinical score
+        abb_to_long_dic = get_abb_to_long_dic(instructions_dir=instruction_dir, CRF_name="BASELINE")
+        baseline_dataframe.columns = [abb_to_long_dic[col] if col in abb_to_long_dic else col for col in baseline_dataframe.columns]
+    else:
+        Exception(f"The mode {mode} isn't defined.")
+        
     #Concat the Baseline and Genotype data
     concat_x = baseline_dataframe.join(genotype_data)
     
     ############################
-    #Removing the features with more than 10% unknown
     bad_features = []
-    for feature_name in concat_x.columns:
-        if ("known" in feature_name):
-            percent_missing = concat_x[feature_name].sum()/len(concat_x)*100
-            if percent_missing > 10:
-                feature_name_prefix = feature_name.split("(")[0]
-                for feat_nam in concat_x.columns:
-                    if feature_name_prefix in feat_nam:
-                        bad_features.append(feat_nam)
+    if mode == "Formatted":
+        #Removing the features with more than 10% unknown
+        for feature_name in concat_x.columns:
+            if ("known" in feature_name):
+                percent_missing = concat_x[feature_name].sum()/len(concat_x)*100
+                if percent_missing > 10:
+                    feature_name_prefix = feature_name.split("(")[0]
+                    for feat_nam in concat_x.columns:
+                        if feature_name_prefix in feat_nam:
+                            bad_features.append(feat_nam)
 
     print("The length of features in X before removing features with many unknowns is:", len(concat_x.columns))
     
@@ -725,17 +737,25 @@ def perform_nested_cv(model, X, y, joblib_memory_path = None):
 
 
 def main(mode, joblib_memory_path=None):
-    #Get the Baseline dataset formatted
-    _, concat_x, target_series = get_baseline_x_y_formatted()
-
-
+    
+    def nested_cv_(model_name):
+        if all_models[model_name] == "Clinical":
+            _, concat_x, target_series = get_baseline_x_y_formatted(mode="Raw")
+            perform_nested_cv(model_name, concat_x, target_series, joblib_memory_path)
+        elif all_models[model_name] == "ML":
+            _, concat_x, target_series = get_baseline_x_y_formatted(mode="Formatted")
+            perform_nested_cv(model_name, concat_x, target_series, joblib_memory_path)
+    
+    
     #Perform nested cv
     if mode == "all_models":
         for model in all_models:
-            perform_nested_cv(model, concat_x, target_series, joblib_memory_path)
+            nested_cv_(model)
     elif mode in all_models.keys():
-        perform_nested_cv(mode, concat_x, target_series, joblib_memory_path)
+        nested_cv_(mode)
     elif mode == "test":
+        _, concat_x, target_series = get_baseline_x_y_formatted(mode="Formatted")
+
         print("Data preparation was finished succesfully.")
     else:
         raise Exception(f"The mode {mode} doesn't exist.")
@@ -744,7 +764,7 @@ def main(mode, joblib_memory_path=None):
 def perform_unsupervised_learning():
     
     #Get the Baseline dataset formatted
-    patient_dataset, concat_x, target_series = get_baseline_x_y_formatted()
+    patient_dataset, concat_x, target_series = get_baseline_x_y_formatted(mode="Formatted")
 
      
     ###########################
