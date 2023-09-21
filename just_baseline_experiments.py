@@ -16,7 +16,7 @@ from sklearn.dummy import DummyClassifier
 from clinical_score import ClinicalScore
 from sklearn.pipeline import Pipeline
 from sklearn.naive_bayes import GaussianNB, ComplementNB
-from sklearn.linear_model import LogisticRegression
+from sklearn.linear_model import LogisticRegression, LassoCV
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier, GradientBoostingClassifier, ExtraTreesClassifier
 from sklearn.svm import SVC, LinearSVC
@@ -29,6 +29,7 @@ from sklearn.feature_selection import SelectFromModel, SequentialFeatureSelector
 
 
 import pandas as pd
+import numpy as np
 import pickle 
 import time
 import sys
@@ -45,6 +46,9 @@ from matplotlib.patches import Patch
 from matplotlib.lines import Line2D
 from scipy.cluster.hierarchy import dendrogram, linkage, fcluster
 from scipy.cluster import hierarchy
+
+import re
+from sksurv.nonparametric import kaplan_meier_estimator
 
 all_models = {
     'CHAP':"Clinical",
@@ -680,13 +684,22 @@ def perform_unsupervised_learning():
     
     #Function to get the full (descriptive) name of the features
     def get_long_name(abb_to_long_dictionary, col):
+        def place_space_before_capitalized_str(sentence):
+            new_string = ""
+            for i, char in enumerate(sentence):
+                if (char.isupper() & (sentence[i-1] != " ") & (~sentence[i-1].isupper()) & (~sentence[i-1].isdigit()) & (sentence[i-1] != "(") & (i!=0)):
+                    new_string = new_string + " " + char
+                else:
+                    new_string = new_string + char
+            return re.sub("\s+", " ", new_string)
+        
         if "_" in col:
             if len([c for c in col if c=="_"])==1:
-                return abb_to_long_dictionary[col.split("_")[0]]+"-"+col.split("_")[1]
+                return place_space_before_capitalized_str(abb_to_long_dictionary[col.split("_")[0]]+f" ({col.split('_')[1]})")
             else:
                 prefix = col[0:col.rfind("_")]
                 suffix = col[col.rfind("_")+1:]
-                return abb_to_long_dictionary[prefix]+"-"+suffix
+                return place_space_before_capitalized_str(abb_to_long_dictionary[prefix]+f" ({suffix})")
         elif col in abb_to_long_dictionary:
             return abb_to_long_dictionary[col]
         else:
@@ -712,6 +725,7 @@ def perform_unsupervised_learning():
     #Change the names of the columns in the baseline data to make them compatible with the clinical score
     abb_to_long_dic = get_abb_to_long_dic(instructions_dir=instruction_dir, CRF_name="BASELINE")
     abb_to_long_dic["years-since-anticoag"] = "Years since start of anticoagulation"
+    abb_to_long_dic["bmi"] = "BMI"
     baseline_dataframe.columns = [get_long_name(abb_to_long_dic, col) for col in baseline_dataframe.columns]
 
     #Change the names of the columns in the genotype data
@@ -721,11 +735,33 @@ def perform_unsupervised_learning():
     #Concat the Baseline and Genotype data
     concat_x = baseline_dataframe.join(genotype_data)
     
+    ############################
+    #Removing the features with more than 10% unknown
+    bad_features = []
+    for feature_name in concat_x.columns:
+        if ("known" in feature_name):
+            percent_missing = concat_x[feature_name].sum()/len(concat_x)*100
+            if percent_missing > 10:
+                feature_name_prefix = feature_name.split("(")[0]
+                for feat_nam in concat_x.columns:
+                    if feature_name_prefix in feat_nam:
+                        bad_features.append(feat_nam)
+
+    print("The length of features in X before removing features with many unknowns is:", len(concat_x.columns))
+    
+    concat_x = concat_x.drop(bad_features, axis=1)
+    
+    print(f" Features with many unknowns to be removed: {bad_features}")
+
+    
+    print("The length of features in X after removing features with many unknowns is:", len(concat_x.columns))
+
      
     ###########################
     #Calculate the time since bleeding from baseline and categorize patients
     
-    bleeding_since_baseline = []
+    bleeding_since_baseline_category = []
+    bleeding_since_baseline_duration = []
     for patient in patient_dataset.all_patients:
         if patient.AD1 is not None:
             number_of_maj_bleed = 0
@@ -744,32 +780,30 @@ def perform_unsupervised_learning():
                     
                     #Some patients have more than one major bleed, we only keep the first one (hence the if statement)
                     if number_of_maj_bleed == 1:
-                        bleeding_since_baseline.append(year_since_bleed_str)
+                        bleeding_since_baseline_category.append(year_since_bleed_str)
+                        bleeding_since_baseline_duration.append(year_since_bleed)
+                        
             #There are patients who have the AD1 filled for them, but they didn't bleed
             if number_of_maj_bleed == 0:
-                bleeding_since_baseline.append("Non-bleeders")
+                bleeding_since_baseline_category.append("Non-bleeders")
 
         else:
-            bleeding_since_baseline.append("Non-bleeders")
+            bleeding_since_baseline_category.append("Non-bleeders")
+            bleeding_since_baseline_duration.append(-1)
             
     ###################################
     
     
     #Scale the baseline dataset for unsupervised learning
-    scaler = StandardScaler()
+    scaler = MinMaxScaler()
     concat_scaled_df = pd.DataFrame(scaler.fit_transform(concat_x),  columns = concat_x.columns)
     
     
     #Dimentionality reduction techniques
     feature_decomp_method_dics = {
-        "PCA": PCA(n_components=2),
         "Kernel PCA": KernelPCA(n_components=2, kernel="rbf",  gamma=None, fit_inverse_transform=False, alpha=1),
         "Isomap": Isomap(n_components=2, n_neighbors=20, p=1),
-
-        "t-SNE\n(perplexity: 5)": TSNE(n_components=2, perplexity=5, init="random", n_iter=250, random_state=0),
-        "t-SNE\n(perplexity: 10)": TSNE(n_components=2, perplexity=10, init="random", n_iter=250, random_state=0),
-        "t-SNE\n(perplexity: 15)": TSNE(n_components=2, perplexity=15, init="random", n_iter=250, random_state=0),
-        "t-SNE\n(perplexity: 30)": TSNE(n_components=2, perplexity=30, init="random", n_iter=250, random_state=0),
+        "t-SNE": TSNE(n_components=2, perplexity=5, init="random", n_iter=250, random_state=0),    
     }
 
     # y = ["bleeders" if val==1 else "non-bleeders" for val in target_series ]
@@ -778,30 +812,65 @@ def perform_unsupervised_learning():
     #######################################
     #Figure with lower dimention visualized
 
-    colors = ["#ed6925" if status != "Non-bleeders" else "#000004" for status in bleeding_since_baseline]
-    alphas = [1 if status != "Non-bleeders" else 0.5 for status in bleeding_since_baseline]
-    zorders = [3 if status != "Non-bleeders" else -1 for status in bleeding_since_baseline ]
-    markers = ["o" if status != "Non-bleeders" else "o" for status in bleeding_since_baseline ]
-    edgecolors = [None if status != "Non-bleeders" else None for status in bleeding_since_baseline ]
-    labels = ["Bleeders" if status != "Non-bleeders" else "Non-bleeders" for status in bleeding_since_baseline ]
+    colors = ["#ed6925" if status != "Non-bleeders" else "#000004" for status in bleeding_since_baseline_category]
+    alphas = [1 if status != "Non-bleeders" else 0.5 for status in bleeding_since_baseline_category]
+    zorders = [3 if status != "Non-bleeders" else -1 for status in bleeding_since_baseline_category ]
+    markers = ["o" if status != "Non-bleeders" else "o" for status in bleeding_since_baseline_category ]
+    edgecolors = [None if status != "Non-bleeders" else None for status in bleeding_since_baseline_category ]
+    labels = ["Bleeders" if status != "Non-bleeders" else "Non-bleeders" for status in bleeding_since_baseline_category ]
 
     def legend_without_duplicate_labels(ax):
         ax.legend( fontsize = 6)
 
         handles, labels = ax.get_legend_handles_labels()
         unique = [(h, l) for i, (h, l) in enumerate(zip(handles, labels)) if l not in labels[:i]]
-        ax.legend(*zip(*unique), loc='lower left', bbox_to_anchor=(0, 1.2, 1, 0.2),
-            ncol=3, mode="expand", fontsize=12)
+        ax.legend(*zip(*unique), loc='upper center', bbox_to_anchor=(0.5, -0.05),
+            ncol=2, fontsize=12)
+
+    #########################################
+    #Create the PCA and explained variance graph        
+    fig, axs = plt.subplots(1, 2, figsize=(8.3, 5.6/2), layout="constrained", gridspec_kw={"wspace":0.15})
+
+    #Draw PCA
+    ax = axs.flat[0]
+    pca_obj = PCA()
+    pca_obj = pca_obj.fit(concat_scaled_df)
+    X_processed = pca_obj.transform(concat_scaled_df)
+
+    for i, (color, alpha, zorder, label, marker, edgecolor) in enumerate(zip(colors, alphas, zorders, labels, markers, edgecolors)):
+        ax.scatter(X_processed[i,0], X_processed[i,1], marker=marker, c = color, s=12, linewidth=0.1, label=label, zorder= zorder, alpha=alpha)
+
+    # ax.get_yaxis().set_visible(False)
+    # ax.get_xaxis().set_visible(False)
+    ax.set_xlabel(f"PC1 ({pca_obj.explained_variance_ratio_[0]*100:.2f}%)")
+    ax.set_ylabel(f"PC2 ({pca_obj.explained_variance_ratio_[1]*100:.2f}%)")
+
+    ax.set_title("PCA", fontsize=15)
+
+    #Draw PCA explained variance
+    ax = axs.flat[1]
+    cumsum_explained_variance = np.cumsum(pca_obj.explained_variance_ratio_)
+    ax.plot( range(1, len(cumsum_explained_variance) +1), cumsum_explained_variance, "-o", color="black")
+    percent95_explained_var_index = np.argmax(cumsum_explained_variance>0.95)+1
+    ax.hlines(0.95, -1, percent95_explained_var_index, linestyles="dotted", color = "grey")
+    ax.vlines(percent95_explained_var_index, -1, 0.95, linestyles="dotted", color = "grey")
+    ax.set_ylim(0, 1.05)
+    ax.set_xlim(-2, 97)
+    ax.set_xlabel("Number of Principal Components")
+    ax.set_ylabel("Cumulative Percentage of Variance")
+    ax.text(percent95_explained_var_index+2, 0.1, f"x = {percent95_explained_var_index}")
+    
+    fig.savefig(f"./sklearn_results/Figures/PCA_Explained_varience_all_new.pdf",  bbox_inches='tight')  
+    fig.savefig(f"./sklearn_results/Figures/PCA_Explained_varience_all_new.png", dpi=500, bbox_inches='tight')  
+
+    
+    #################################################
+    #Create the graph of three dimentionality reduction
+    
+    fig, axs = plt.subplots(1, 3, figsize=(8.3, 5.6/2), layout="constrained", gridspec_kw={"wspace":0.1})
 
 
-    fig = plt.figure(layout="constrained", figsize=(8.3, 5.6))
-    subfigs = fig.subfigures(2, 1, hspace= 0.05, wspace= 0.05)
-
-    axsTop = subfigs[0].subplots(1, 3)
-    axsBottom = subfigs[1].subplots(1, 4)
-        
-
-    for method, ax in zip(feature_decomp_method_dics, [*axsTop, *axsBottom]):
+    for method, ax in zip(feature_decomp_method_dics, axs.flat):
         
         X_processed = feature_decomp_method_dics[method].fit_transform(concat_scaled_df)
         
@@ -814,10 +883,10 @@ def perform_unsupervised_learning():
 
         ax.set_title(method, fontsize=15)
 
-    legend_without_duplicate_labels(axsTop[1])
+    legend_without_duplicate_labels(axs.flat[1])
 
-    fig.savefig(f"./sklearn_results/Figures/dimentionality_reduction_all.pdf",  bbox_inches='tight')  
-    fig.savefig(f"./sklearn_results/Figures/dimentionality_reduction_all.png", dpi=500, bbox_inches='tight')  
+    fig.savefig(f"./sklearn_results/Figures/dimentionality_reduction_all_new.pdf",  bbox_inches='tight')  
+    fig.savefig(f"./sklearn_results/Figures/dimentionality_reduction_all_new.png", dpi=500, bbox_inches='tight')  
 
     ####################################
     
@@ -839,10 +908,10 @@ def perform_unsupervised_learning():
     X_PCA = PCA(n_components=2).fit_transform(concat_scaled_df)
 
 
-    alphas = [1 if status != "Non-bleeders" else 1 for status in bleeding_since_baseline]
-    zorders = [3 if status != "Non-bleeders" else -1 for status in bleeding_since_baseline ]
-    markers = ["X" if status != "Non-bleeders" else "o" for status in bleeding_since_baseline ]
-    edgecolors = ["yellow" if status != "Non-bleeders" else None for status in bleeding_since_baseline ]
+    alphas = [1 if status != "Non-bleeders" else 1 for status in bleeding_since_baseline_category]
+    zorders = [3 if status != "Non-bleeders" else -1 for status in bleeding_since_baseline_category ]
+    markers = ["X" if status != "Non-bleeders" else "o" for status in bleeding_since_baseline_category ]
+    edgecolors = ["yellow" if status != "Non-bleeders" else None for status in bleeding_since_baseline_category ]
 
 
     fig, axs = plt.subplots(1, 2, figsize=(10, 5), gridspec_kw={'hspace': 0.15, 'wspace': 0.05})
@@ -856,7 +925,7 @@ def perform_unsupervised_learning():
         colors = ["#f98e09" if label != 0 else "#57106e" for label in clusters.labels_]
 
 
-        for i, (color, alpha, zorder, label, marker, edgecolor) in enumerate(zip(colors, alphas, zorders, bleeding_since_baseline, markers, edgecolors)):
+        for i, (color, alpha, zorder, label, marker, edgecolor) in enumerate(zip(colors, alphas, zorders, bleeding_since_baseline_category, markers, edgecolors)):
             ax.scatter(X_PCA[i,0], X_PCA[i,1], marker=marker, c = color, s=14, linewidth=0.1, label=label, zorder= zorder, 
                     alpha=alpha, edgecolors=edgecolor)
 
@@ -871,28 +940,29 @@ def perform_unsupervised_learning():
         
     axs[1].legend(handles=legend_elements, loc="center left", bbox_to_anchor=(1.04, 0.5), fontsize=12)
         
-    fig.savefig(f"./sklearn_results/Figures/clustering_pic_all_points.pdf",  bbox_inches='tight')  
-    fig.savefig(f"./sklearn_results/Figures/clustering_pic_all_points.png", dpi=500,  bbox_inches='tight')  
+    fig.savefig(f"./sklearn_results/Figures/clustering_pic_all_points_new.pdf",  bbox_inches='tight')  
+    fig.savefig(f"./sklearn_results/Figures/clustering_pic_all_points_new.png", dpi=500,  bbox_inches='tight')  
     ###########################################
     
     #######################################
     #Clustering and PCA just on the bleeders
     #Just analyse the bleeders now
-    only_bleeders_X = concat_x[target_series==1]
-    only_bleeders_X_scaled = pd.DataFrame(StandardScaler().fit_transform(only_bleeders_X), columns=only_bleeders_X.columns, index=only_bleeders_X.index)    
+    only_bleeders_X = concat_x[target_series==1].copy()
+    only_bleeders_X_scaled = pd.DataFrame(MinMaxScaler().fit_transform(only_bleeders_X), columns=only_bleeders_X.columns, index=only_bleeders_X.index)    
     
     #########
     #The agglomerative clustering on the bleeders
     fig, ax = plt.subplots(figsize=(15,5))
 
     Z = linkage(only_bleeders_X_scaled, 'ward')
+    
+    bleeders_cluster_color_pallette = ["#440154",'#5ec962', '#f98e09']
 
-    hierarchy.set_link_color_palette(["#440154",'#5ec962', '#f98e09'])
+    hierarchy.set_link_color_palette(bleeders_cluster_color_pallette)
 
-    a = dendrogram(Z, labels=only_bleeders_X_scaled.index, leaf_rotation=90, ax=ax)
+    max_d = 7.5
 
-    max_d = 29
-
+    a = dendrogram(Z, labels=only_bleeders_X_scaled.index, leaf_rotation=90, ax=ax,  count_sort=True, color_threshold=max_d)
 
     ax.axhline(y=max_d, xmin = 0, xmax=1000, color='gray', linestyle="dotted")
 
@@ -901,12 +971,65 @@ def perform_unsupervised_learning():
     ax.set_ylabel("Distance", fontsize=20)
     ax.yaxis.set_tick_params(labelsize=15)
 
-    ax.text(x=10, y=30, s=f"Cutoff: {max_d}", size=13)
+    # ax.text(x=10, y=30, s=f"Cutoff: {max_d}", size=13)
 
-    fig.savefig(f"./sklearn_results/Figures/agglomerative_clustering_bleeders.pdf",  bbox_inches='tight')  
-    fig.savefig(f"./sklearn_results/Figures/agglomerative_clustering_bleeders.png", dpi=500,  bbox_inches='tight')  
+    fig.savefig(f"./sklearn_results/Figures/agglomerative_clustering_bleeders_new.pdf",  bbox_inches='tight')  
+    fig.savefig(f"./sklearn_results/Figures/agglomerative_clustering_bleeders_new.png", dpi=500,  bbox_inches='tight')  
     ##########
     
+    ####################################################
+    #Create the Kaplan Meier plot
+    #Clusters as defined by the agglomerative clustering
+    clusters = fcluster(Z, max_d, criterion='distance')
+    only_bleeders_X["cluster"] = clusters
+    #Time in months
+    only_bleeders_X["time_to_bleed_months"] = [val*12 for val in bleeding_since_baseline_duration if val != -1]
+
+    #Plot the Kaplan Meier curve
+    fig, ax = plt.subplots(figsize=(4, 2.5))
+    for group, color in zip(sorted(set(clusters)), bleeders_cluster_color_pallette):
+        
+        data_subset = only_bleeders_X[only_bleeders_X["cluster"]==group].copy()
+
+        time, survival_prob, conf_int = kaplan_meier_estimator(
+            [True]*len(data_subset), data_subset["time_to_bleed_months"], conf_type="log-log"
+        )
+        plt.step(time, 1-survival_prob, where="post", color=color, label = f"Cluster {group}")
+        # plt.fill_between(time, conf_int[0], conf_int[1], alpha=0.25, step="post")
+    plt.legend()
+    plt.ylim(0, 1)
+    plt.ylabel("Probability of Bleeding")
+    plt.xlabel("Months")
+
+    fig.savefig(f"./sklearn_results/Figures/Kaplan_Meier.pdf",  bbox_inches='tight')  
+    fig.savefig(f"./sklearn_results/Figures/Kaplan_Meier.png", dpi=500,  bbox_inches='tight')  
+  
+    #################
+    #Perform one Cluster vs rest to find the discriminaotory features
+    fig, axs = plt.subplots(1, 3, figsize=(15, 3.5), constrained_layout=True)
+
+    for ax, cluster_num, color in zip(axs.flat, set(clusters), bleeders_cluster_color_pallette):
+
+        x_cluster = only_bleeders_X.copy()
+        x_cluster = x_cluster.drop(["cluster","time_to_bleed_months"], axis=1)
+        x_cluster = pd.DataFrame(StandardScaler().fit_transform(x_cluster), columns=x_cluster.columns)
+        y_cluster = only_bleeders_X["cluster"].copy()
+        y_cluster = [1 if val == cluster_num else 0 for val in y_cluster]
+        
+        
+        reg = LassoCV(cv=3, random_state=0, max_iter=5000).fit(x_cluster, y_cluster)
+
+        coef_df = pd.DataFrame({"Feature Name":reg.feature_names_in_, "coef":reg.coef_})
+        coef_df = coef_df[np.abs(coef_df["coef"]) > 0]
+        coef_df = coef_df.sort_values(by="coef", ascending=True)
+        coef_df = pd.concat([coef_df[0:5],coef_df[-5:] ])
+        ax.barh(coef_df["Feature Name"], coef_df["coef"], color=color)
+        ax.set_title(f"Cluster {cluster_num}")
+        ax.set_xlabel("Coefficient")
+        
+    fig.savefig(f"./sklearn_results/Figures/LasssoCV_results.pdf",  bbox_inches='tight')  
+    fig.savefig(f"./sklearn_results/Figures/LasssoCV_results.png", dpi=500,  bbox_inches='tight')  
+        
     ###################
     #Create PCA of bleeders and visualize it with the three groups found before
     #Draw loading vectors
@@ -941,25 +1064,21 @@ def perform_unsupervised_learning():
     #Get the loadings of the pca object
     loadings = pd.DataFrame(pca_obj.components_.T, columns=['PC1', 'PC2'], index=only_bleeders_X_scaled.columns)
     #Save all the loadings just in case
-    loadings.to_excel("./sklearn_results/Figures/bleeders_PCA-loadings_all.xlsx")
+    loadings.to_excel("./sklearn_results/Figures/bleeders_PCA-loadings_all_new.xlsx")
 
     #Scaling factor to draw the loading vectors
     scale_PC1 = 1.0/(X_pca[:,0].max() - X_pca[:,0].min())
     scale_PC2 = 1.0/(X_pca[:,1].max() - X_pca[:,1].min())
     
     #Extract the top three highest and lowest for each principle component
-    loadings_copy = loadings.copy()
-    
-    #Remove the feature "Factor V Leiden-Heterozygote" because it is a duplicate with Factor V Leiden-heterozygous mutant
-    loadings_copy = loadings_copy.drop("Factor V Leiden-Heterozygote", axis=0)
-    
+    loadings_copy = loadings.copy()    
     three_highest_pc1 = loadings_copy.sort_values(by="PC1", ascending=False)[0:3]
     three_lowest_pc1 = loadings_copy.sort_values(by="PC1", ascending=True)[0:3]
     three_highest_pc2 = loadings_copy.sort_values(by="PC2", ascending=False)[0:3]
     three_lowest_pc2 = loadings_copy.sort_values(by="PC2", ascending=True)[0:3]
 
     loadings_copy = pd.concat([three_highest_pc1, three_lowest_pc1, three_highest_pc2, three_lowest_pc2])
-    loadings_copy.to_excel("./sklearn_results/Figures/bleeders_PCA-loadings_top12.xlsx")
+    loadings_copy.to_excel("./sklearn_results/Figures/bleeders_PCA-loadings_top12_new.xlsx")
     ################################
     
     ###########
@@ -1000,8 +1119,8 @@ def perform_unsupervised_learning():
     ax.set_ylabel(f"PC2 ({pc2_explained_variance*100:.2}%)", fontdict={"size":13})
     ax.set_xlim(-0.65, 0.8)
 
-    fig.savefig(f"./sklearn_results/Figures/PCA_of_bleeders_with_loadings.pdf",  bbox_inches='tight')  
-    fig.savefig(f"./sklearn_results/Figures/PCA_of_bleeders_with_loadings.png", dpi=500, bbox_inches='tight')  
+    fig.savefig(f"./sklearn_results/Figures/PCA_of_bleeders_with_loadings_new.pdf",  bbox_inches='tight')  
+    fig.savefig(f"./sklearn_results/Figures/PCA_of_bleeders_with_loadings_new.png", dpi=500, bbox_inches='tight')  
     ########################
     
     
