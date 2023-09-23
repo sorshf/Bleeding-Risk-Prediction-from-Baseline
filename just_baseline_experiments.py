@@ -16,7 +16,7 @@ from sklearn.dummy import DummyClassifier
 from clinical_score import ClinicalScore
 from sklearn.pipeline import Pipeline
 from sklearn.naive_bayes import GaussianNB, ComplementNB
-from sklearn.linear_model import LogisticRegression, LassoCV
+from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier, GradientBoostingClassifier, ExtraTreesClassifier
 from sklearn.svm import SVC, LinearSVC
@@ -808,10 +808,33 @@ def perform_unsupervised_learning():
     scaler = MinMaxScaler()
     concat_scaled_df = pd.DataFrame(scaler.fit_transform(concat_x),  columns = concat_x.columns)
     
+    ###########################
+    #Plot the correlation matrix
+    fig, ax = plt.subplots(figsize=(15*1.5, 12*1.5))
+
+    corr_df = concat_scaled_df.corr("pearson")
+    mask_matrix = np.triu(np.ones_like(corr_df))
+
+    sns.heatmap(corr_df, cmap="vlag", linewidth=.5, mask=mask_matrix, cbar_kws={"shrink":0.4, "pad":0, "anchor":(-1, 0.8), "label":"Pearson Correlation"})
+    ax.set_xticklabels(ax.get_xmajorticklabels(), fontsize = 10)
+    ax.set_yticklabels(ax.get_ymajorticklabels(), fontsize = 10)
+    
+    fig.savefig(f"./sklearn_results/Figures/correlation_matrix.png", dpi=500, bbox_inches='tight')  
+    
+    corr_list = []
+    for i in range(len(corr_df)):
+        for j in range(i+1):
+            if i != j:
+                if np.abs(corr_df.iloc[i, j]) >0.5:
+                    corr_list.append({"Feature 1":corr_df.columns[i], "Feature 2":corr_df.columns[j], "Pearson Correlation":corr_df.iloc[i, j]})
+
+    corr_list = pd.DataFrame.from_dict(corr_list).sort_values(by="Pearson Correlation", ascending=False)
+    corr_list.to_csv("./sklearn_results/Figures/moreThan50_correlation.csv")
+    #############################
     
     #Dimentionality reduction techniques
     feature_decomp_method_dics = {
-        "Kernel PCA": KernelPCA(n_components=2, kernel="rbf",  gamma=None, fit_inverse_transform=False, alpha=1),
+        "Kernel PCA": KernelPCA(n_components=2, kernel="rbf",  gamma=1/5, fit_inverse_transform=False),
         "Isomap": Isomap(n_components=2, n_neighbors=20, p=1),
         "t-SNE": TSNE(n_components=2, perplexity=5, init="random", n_iter=250, random_state=0),    
     }
@@ -865,10 +888,10 @@ def perform_unsupervised_learning():
     ax.hlines(0.95, -1, percent95_explained_var_index, linestyles="dotted", color = "grey")
     ax.vlines(percent95_explained_var_index, -1, 0.95, linestyles="dotted", color = "grey")
     ax.set_ylim(0, 1.05)
-    ax.set_xlim(-2, 97)
+    ax.set_xlim(-2, 102)
     ax.set_xlabel("Number of Principal Components")
     ax.set_ylabel("Cumulative Percentage of Variance")
-    ax.text(percent95_explained_var_index+2, 0.1, f"x = {percent95_explained_var_index}")
+    # ax.text(percent95_explained_var_index+2, 0.1, f"x = {percent95_explained_var_index}")
     
     fig.savefig(f"./sklearn_results/Figures/PCA_Explained_varience_all_new.pdf",  bbox_inches='tight')  
     fig.savefig(f"./sklearn_results/Figures/PCA_Explained_varience_all_new.png", dpi=500, bbox_inches='tight')  
@@ -943,7 +966,7 @@ def perform_unsupervised_learning():
         ax.get_yaxis().set_visible(False)
         ax.get_xaxis().set_visible(False)
 
-        ax.text(0.01, 0.99, ha='left', va='top',transform=ax.transAxes,size=12,
+        ax.text(0.60, 0.99, ha='left', va='top',transform=ax.transAxes,size=11,
                 s=f"Homogeneity: {homogeneity_score(target_series ,clusters.labels_):.2e} \nCompleteness: {completeness_score(target_series,clusters.labels_):.2e}")
 
         ax.set_title(method, fontsize=16)
@@ -970,7 +993,7 @@ def perform_unsupervised_learning():
 
     hierarchy.set_link_color_palette(bleeders_cluster_color_pallette)
 
-    max_d = 7.5
+    max_d = 9
 
     a = dendrogram(Z, labels=only_bleeders_X_scaled.index, leaf_rotation=90, ax=ax,  count_sort=True, color_threshold=max_d)
 
@@ -991,6 +1014,10 @@ def perform_unsupervised_learning():
     #Create the Kaplan Meier plot
     #Clusters as defined by the agglomerative clustering
     clusters = fcluster(Z, max_d, criterion='distance')
+    
+    #Print number of patients in each cluster
+    print([f"Cluster {cluster_num}: {len(clusters[clusters==cluster_num])}" for cluster_num in set(clusters)])
+    
     only_bleeders_X["cluster"] = clusters
     #Time in months
     only_bleeders_X["time_to_bleed_months"] = [val*12 for val in bleeding_since_baseline_duration if val != -1]
@@ -1006,7 +1033,7 @@ def perform_unsupervised_learning():
         )
         plt.step(time, 1-survival_prob, where="post", color=color, label = f"Cluster {group}")
         # plt.fill_between(time, conf_int[0], conf_int[1], alpha=0.25, step="post")
-    plt.legend()
+    plt.legend(loc="lower right")
     plt.ylim(0, 1)
     plt.ylabel("Probability of Bleeding")
     plt.xlabel("Months")
@@ -1016,30 +1043,52 @@ def perform_unsupervised_learning():
   
     #################
     #Perform one Cluster vs rest to find the discriminaotory features
-    fig, axs = plt.subplots(1, 3, figsize=(15, 3.5), constrained_layout=True)
+    # fig, axs = plt.subplots(1, 3, figsize=(15, 3.5), constrained_layout=True)
 
-    for ax, cluster_num, color in zip(axs.flat, set(clusters), bleeders_cluster_color_pallette):
+    # for ax, cluster_num, color in zip(axs.flat, set(clusters), bleeders_cluster_color_pallette):
 
-        x_cluster = only_bleeders_X.copy()
-        x_cluster = x_cluster.drop(["cluster","time_to_bleed_months"], axis=1)
-        x_cluster = pd.DataFrame(StandardScaler().fit_transform(x_cluster), columns=x_cluster.columns)
-        y_cluster = only_bleeders_X["cluster"].copy()
-        y_cluster = [1 if val == cluster_num else 0 for val in y_cluster]
+    #     x_cluster = only_bleeders_X.copy()
+    #     x_cluster = x_cluster.drop(["cluster","time_to_bleed_months"], axis=1)
+    #     x_cluster = pd.DataFrame(StandardScaler().fit_transform(x_cluster), columns=x_cluster.columns)
+    #     y_cluster = only_bleeders_X["cluster"].copy()
+    #     y_cluster = [1 if val == cluster_num else 0 for val in y_cluster]
         
         
-        reg = LassoCV(cv=3, random_state=0, max_iter=5000).fit(x_cluster, y_cluster)
+    #     reg = LassoCV(cv=3, random_state=0, max_iter=5000).fit(x_cluster, y_cluster)
 
-        coef_df = pd.DataFrame({"Feature Name":reg.feature_names_in_, "coef":reg.coef_})
-        coef_df = coef_df[np.abs(coef_df["coef"]) > 0]
-        coef_df = coef_df.sort_values(by="coef", ascending=True)
-        coef_df = pd.concat([coef_df[0:5],coef_df[-5:] ])
-        ax.barh(coef_df["Feature Name"], coef_df["coef"], color=color)
-        ax.set_title(f"Cluster {cluster_num}")
-        ax.set_xlabel("Coefficient")
+    #     coef_df = pd.DataFrame({"Feature Name":reg.feature_names_in_, "coef":reg.coef_})
+    #     coef_df = coef_df[np.abs(coef_df["coef"]) > 0]
+    #     coef_df = coef_df.sort_values(by="coef", ascending=True)
+    #     coef_df = pd.concat([coef_df[0:5],coef_df[-5:] ])
+    #     ax.barh(coef_df["Feature Name"], coef_df["coef"], color=color)
+    #     ax.set_title(f"Cluster {cluster_num}")
+    #     ax.set_xlabel("Coefficient")
         
+    # fig.savefig(f"./sklearn_results/Figures/LasssoCV_results.pdf",  bbox_inches='tight')  
+    # fig.savefig(f"./sklearn_results/Figures/LasssoCV_results.png", dpi=500,  bbox_inches='tight')  
+    ###################
+    #Lasso on the two clusters
+    fig, ax = plt.subplots(figsize=(9, 4), constrained_layout=True)
+
+    x_cluster = only_bleeders_X.copy()
+    x_cluster = x_cluster.drop(["cluster","time_to_bleed_months"], axis=1)
+    x_cluster = pd.DataFrame(StandardScaler().fit_transform(x_cluster), columns=x_cluster.columns)
+    y_cluster = only_bleeders_X["cluster"].copy()
+    y_cluster = [1 if val == 1 else 0 for val in y_cluster]
+
+
+    reg = LogisticRegressionCV(cv=2, random_state=0, max_iter=5000, penalty='l1', solver="liblinear", Cs=[0.01, 0.05, 0.1, 0.15]).fit(x_cluster, y_cluster)
+
+    coef_df = pd.DataFrame({"Feature Name":reg.feature_names_in_, "coef":reg.coef_[0]})
+    coef_df = coef_df[coef_df["coef"]!=0].sort_values(by="coef")
+    ax.barh(coef_df["Feature Name"], coef_df["coef"], color=bleeders_cluster_color_pallette[2])
+    ax.set_xlabel("Coefficient", size=12)
+    ax.set_yticklabels(ax.get_yticklabels(), size=12)
+
+    
     fig.savefig(f"./sklearn_results/Figures/LasssoCV_results.pdf",  bbox_inches='tight')  
     fig.savefig(f"./sklearn_results/Figures/LasssoCV_results.png", dpi=500,  bbox_inches='tight')  
-        
+  
     ###################
     #Create PCA of bleeders and visualize it with the three groups found before
     #Draw loading vectors
