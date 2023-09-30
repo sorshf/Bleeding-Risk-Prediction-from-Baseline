@@ -49,6 +49,10 @@ from scipy.cluster import hierarchy
 
 import re
 from sksurv.nonparametric import kaplan_meier_estimator
+from sklearn.feature_selection import chi2
+from scipy.stats import ttest_ind
+from statsmodels.stats import multitest
+from sksurv.compare import compare_survival
 
 all_models = {
     'CHAP':"Clinical",
@@ -247,8 +251,9 @@ def generate_metric_pictures():
 
         for x_axis, ml_model in enumerate(ordered_xlabels):
             mean = ml_data[ml_data['model']==ml_model]["value"].mean()
+            std = ml_data[ml_data['model']==ml_model]["value"].std()
             max_value =  ax.get_ylim()[1]
-            ax.text(x_axis-0.35, max_value+(0.02*max_value), s=f"μ={mean:.2f}", size=8)
+            ax.text(x_axis-0.35, max_value+(0.02*max_value), s=f" {mean:.2f}\n({std:.2f})", size=9)
 
         # ax.spines["right"].set_visible(False)
         # ax.spines["top"].set_visible(False)
@@ -324,7 +329,7 @@ def generate_metric_pictures():
             
         model = nice_names[model]
         
-        feature_selection_counter[model] = {"PCA":0, "SFS":0, "None":0}
+        feature_selection_counter[model] = {"PCA-5":0,"PCA-10":0, "SFS-5":0,"SFS-10":0, "None":0}
         
         for i in range(len(nested_score['estimator'])):
             est1 = nested_score['estimator'][i]
@@ -334,24 +339,33 @@ def generate_metric_pictures():
             if feature_selection_method == reduce_dim_method: #Means both are passthrough, and no reduction in # of features occured
                 feature_selection_counter[model]["None"] += 1
             elif reduce_dim_method != "passthrough": #Means PCA has occured
-                feature_selection_counter[model]["PCA"] += 1
+                if len(reduce_dim_method.components_) == 5:
+                    feature_selection_counter[model]["PCA-5"] += 1
+                elif len(reduce_dim_method.components_) == 10:
+                    feature_selection_counter[model]["PCA-10"] += 1
             else:#Means Select from model occured
-                feature_selection_counter[model]["SFS"] += 1
+                if len(feature_selection_method.get_feature_names_out()) == 5:
+                    feature_selection_counter[model]["SFS-5"] += 1
+                elif len(feature_selection_method.get_feature_names_out()) == 10:
+                    feature_selection_counter[model]["SFS-10"] += 1
             
-    fig, ax = plt.subplots(figsize=(8, 4))
+    fig, ax = plt.subplots(figsize=(8/1.5, 4/1.5))
     
 
     feat_select_df = pd.DataFrame.from_dict(feature_selection_counter).T
-    feat_select_df["model"] = feat_select_df.index
-    feat_select_df = feat_select_df.melt(id_vars ="model", value_vars=["PCA", "SFS", "None"], var_name="method")
+    # feat_select_df["model"] = feat_select_df.index
+    # feat_select_df = feat_select_df.melt(id_vars ="model", value_vars=["PCA", "SFS", "None"], var_name="method")
 
-    sns.barplot(data=feat_select_df, x="model", y="value", hue="method", ax=ax, palette="icefire", width=0.6)
-    ax.legend(bbox_to_anchor=(0.5, 0.85), loc='center left')
-    ax.set_xlabel("Models", fontsize=14)
-    ax.set_ylabel("Counts", fontsize=14)
+    # sns.barplot(data=feat_select_df, x="model", y="value", hue="method", ax=ax, palette="icefire", width=0.6)
+    feat_select_df.plot(kind="bar", stacked=True, ax=ax, color=["#d15e56", "#d13328",
+                                                            "#ba64d1", "#b034d1",
+                                                            "#B0A8B9"])
+    ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+    ax.set_xlabel("Models", fontsize=12)
+    ax.set_ylabel("Counts", fontsize=12)
     
-    ax.xaxis.set_tick_params(labelsize=10)
-    ax.yaxis.set_tick_params(labelsize=10)
+    ax.xaxis.set_tick_params(labelsize=9, rotation=0)
+    ax.yaxis.set_tick_params(labelsize=9)
 
     fig.savefig(f"./sklearn_results/Figures/best_selection_methods.pdf", bbox_inches="tight")
     fig.savefig(f"./sklearn_results/Figures/best_selection_methods.png", dpi=300, bbox_inches="tight")
@@ -995,7 +1009,7 @@ def perform_unsupervised_learning():
 
     max_d = 9
 
-    a = dendrogram(Z, labels=only_bleeders_X_scaled.index, leaf_rotation=90, ax=ax,  count_sort=True, color_threshold=max_d)
+    a = dendrogram(Z, labels=only_bleeders_X_scaled.index, leaf_rotation=90, ax=ax, color_threshold=max_d)
 
     ax.axhline(y=max_d, xmin = 0, xmax=1000, color='gray', linestyle="dotted")
 
@@ -1040,7 +1054,14 @@ def perform_unsupervised_learning():
 
     fig.savefig(f"./sklearn_results/Figures/Kaplan_Meier.pdf",  bbox_inches='tight')  
     fig.savefig(f"./sklearn_results/Figures/Kaplan_Meier.png", dpi=500,  bbox_inches='tight')  
-  
+    
+    ###################
+    #Perform log-rank test to see if the two clusters are statistically significantly different
+    arr_content = [(True, val) for val in only_bleeders_X["time_to_bleed_months"]]
+    arr_content = np.array(arr_content, dtype=np.dtype([('bool', bool), ('val', float)]))
+    chisq, p_val, stats, covar_mat =  compare_survival(y=arr_content  ,group_indicator=only_bleeders_X["cluster"], return_stats=True)
+    print(f"\nThe log-rank p-value is {p_val}\n")
+    print(stats, "\n")
     #################
     #Perform one Cluster vs rest to find the discriminaotory features
     # fig, axs = plt.subplots(1, 3, figsize=(15, 3.5), constrained_layout=True)
@@ -1068,7 +1089,7 @@ def perform_unsupervised_learning():
     # fig.savefig(f"./sklearn_results/Figures/LasssoCV_results.png", dpi=500,  bbox_inches='tight')  
     ###################
     #Lasso on the two clusters
-    fig, ax = plt.subplots(figsize=(9, 4), constrained_layout=True)
+    fig, ax = plt.subplots(figsize=(7, 4), constrained_layout=True)
 
     x_cluster = only_bleeders_X.copy()
     x_cluster = x_cluster.drop(["cluster","time_to_bleed_months"], axis=1)
@@ -1081,10 +1102,54 @@ def perform_unsupervised_learning():
 
     coef_df = pd.DataFrame({"Feature Name":reg.feature_names_in_, "coef":reg.coef_[0]})
     coef_df = coef_df[coef_df["coef"]!=0].sort_values(by="coef")
+    
+    ########################
+    #Perform p_value calculations of the features between the two clusters
+    coef_df = coef_df.sort_values(by="coef", ascending=False)
+
+    percentage_df = []
+    for feat in coef_df["Feature Name"]:
+        #If the column was not categorical we do mean +- std and perform t-test to see their difference
+        if len(set(only_bleeders_X[feat])) > 2:
+            mean_cluster_1 = only_bleeders_X.loc[only_bleeders_X["cluster"] == 1, feat].mean()
+            std_cluster_1 = only_bleeders_X.loc[only_bleeders_X["cluster"] == 1, feat].std()
+            mean_cluster_2 = only_bleeders_X.loc[only_bleeders_X["cluster"] == 2, feat].mean()
+            std_cluster_2 = only_bleeders_X.loc[only_bleeders_X["cluster"] == 2, feat].std()
+    
+            _ ,p_val  = ttest_ind(only_bleeders_X.loc[only_bleeders_X["cluster"] == 1, feat], only_bleeders_X.loc[only_bleeders_X["cluster"] == 2, feat])
+            
+            percentage_df.append({"Feature Name": feat, "Cluster 1":f"{mean_cluster_1:.2f}±{std_cluster_1:.2f}" , "Cluster 2":f"{mean_cluster_2:.2f}±{std_cluster_2:.2f}", "p-value": p_val})
+        
+        #If the column was not categorical we do % prevalence and perform chi2 to see their difference
+        else:
+            percent_cluster_1 = only_bleeders_X.loc[only_bleeders_X["cluster"] == 1, feat].sum()/len(only_bleeders_X.loc[only_bleeders_X["cluster"] == 1, feat])*100
+            percent_cluster_2 = only_bleeders_X.loc[only_bleeders_X["cluster"] == 2, feat].sum()/len(only_bleeders_X.loc[only_bleeders_X["cluster"] == 2, feat])*100
+            
+            _ ,p_val  = chi2(only_bleeders_X[feat].to_frame(), only_bleeders_X["cluster"])
+            
+            p_val = list(p_val)[0]        
+            
+            percentage_df.append({"Feature Name": feat, "Cluster 1":f"{percent_cluster_1:.2f}%" , "Cluster 2":f"{percent_cluster_2:.2f}%", "p-value": p_val})
+    
+    #Create a df with the column values and p-values        
+    percentage_df = pd.DataFrame.from_dict(percentage_df)
+    percentage_df = percentage_df.set_index("Feature Name")
+
+    #Multihypothesis correction with bh method
+    _, corrected_pvalues, _, _ = multitest.multipletests(percentage_df["p-value"], alpha=0.05, method="fdr_bh")
+    percentage_df["p-value"] = [f"{val:.2e}" for val in corrected_pvalues]
+    
+    percentage_df.to_csv("./sklearn_results/Figures/p_values_of_features_between_two_clusters.csv")
+
+    ################################
+
+    coef_df["Feature Name"] = coef_df["Feature Name"].apply(lambda x: x+" *" if float(percentage_df.loc[x,"p-value"])<0.05 else x)
+
+    coef_df = coef_df.sort_values(by="coef")
+    
     ax.barh(coef_df["Feature Name"], coef_df["coef"], color=bleeders_cluster_color_pallette[2])
     ax.set_xlabel("Coefficient", size=12)
-    ax.set_yticklabels(ax.get_yticklabels(), size=12)
-
+    ax.yaxis.set_tick_params(size=12)
     
     fig.savefig(f"./sklearn_results/Figures/LasssoCV_results.pdf",  bbox_inches='tight')  
     fig.savefig(f"./sklearn_results/Figures/LasssoCV_results.png", dpi=500,  bbox_inches='tight')  
