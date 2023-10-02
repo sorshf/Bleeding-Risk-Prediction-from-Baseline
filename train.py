@@ -26,7 +26,10 @@ def main(experiment_name):
     #Remove patients without baseline, remove the FUPS after bleeding/termination, fill FUP data for those without FUP data
     patient_dataset.filter_patients_sequentially(mode="fill_patients_without_FUP")
     print(patient_dataset.get_all_targets_counts(), "\n")
-
+    
+    #Add zeroth FUP to all the patients, unless theirs were missing in the first place which were replaced with filter_patients_sequentially
+    patient_dataset.add_zeroth_FUP_to_all_patients()
+    
     #Add one feature to each patient indicating year since baseline to each FUP
     patient_dataset.add_FUP_since_baseline()
 

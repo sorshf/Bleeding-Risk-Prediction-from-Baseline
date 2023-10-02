@@ -439,15 +439,35 @@ class Patient():
         #If the bleeding date list isn't empty, 
         # we remove the FUPOUTCOME and FUPPREDICTOR that come after bleeding.
         if bleeding_date:
-            self.FUPPREDICTOR = self.FUPPREDICTOR[self.FUPPREDICTOR['fudt'] < bleeding_date[0]]
-            self.FUPOUTCOME = self.FUPOUTCOME[self.FUPOUTCOME['fuodt'] < bleeding_date[0]]
+            new_FUPPREDICTOR = self.FUPPREDICTOR[self.FUPPREDICTOR['fudt'] < bleeding_date[0]].copy()
+            new_FUPOUTCOME = self.FUPOUTCOME[self.FUPOUTCOME['fuodt'] < bleeding_date[0]].copy()
+            if len(new_FUPPREDICTOR) != len(self.FUPPREDICTOR):
+                self.FUPPREDICTOR = new_FUPPREDICTOR
+                self.FUPOUTCOME = new_FUPOUTCOME
+                
             
         #If the discontinuation date list isn't empty, 
         # we remove the FUPOUTCOME and FUPPREDICTOR that come after discontinuation.
         if discont_date:
-            self.FUPPREDICTOR = self.FUPPREDICTOR[self.FUPPREDICTOR['fudt'] < discont_date[0]]
-            self.FUPOUTCOME = self.FUPOUTCOME[self.FUPOUTCOME['fuodt'] < discont_date[0]]
+            new_FUPPREDICTOR = self.FUPPREDICTOR[self.FUPPREDICTOR['fudt'] < discont_date[0]].copy()
+            new_FUPOUTCOME = self.FUPOUTCOME[self.FUPOUTCOME['fuodt'] < discont_date[0]].copy()
+            if len(new_FUPPREDICTOR) != len(self.FUPPREDICTOR):
+                self.FUPPREDICTOR = new_FUPPREDICTOR
+                self.FUPOUTCOME =  new_FUPOUTCOME
+            
+    def get_bleeding_date(self):
+        color_dic = COLOR_dic.copy()
+        color_dic = {value:key for key, value in color_dic.items()}
+        all_dates, all_colors, _, _, _ = self.get_timeline_for_plotting()
 
+        #The list of bleeding dates
+        bleeding_date = [dates for dates, color in zip(all_dates, all_colors) if color_dic[color] == 'majbldconf']
+        
+        if bleeding_date:
+            return bleeding_date[0]
+        else:
+            return None
+        
     def get_target(self):
         """Get the bleeding target for the patient.
 
@@ -461,57 +481,80 @@ class Patient():
                 if item["majbldconf"] == 1: #IF there is a majbld, the return will return 1, otherwise 0.
                    return 1
             return 0
+        
+    def get_zeroth_FUPOUTCOME(self):
+        """Generates a zeroth FUP Outcome from the baseline information. This is to have an input for RNN for the patients w/o FUP.
 
+        Args:
+            patient (patient): The patient object.
+
+        Returns:
+            pd.dataframe: Dataframe of the fup outcome features.
+        """
+        new_FUPOUTCOME = dict() #Empty dic
+
+        new_FUPOUTCOME["uniqid"] = self.BASELINE["uniqid"]
+        new_FUPOUTCOME["fuodt"] = self.BASELINE["dtbas"]
+
+        #Create the pandas df from dic
+        new_FUPOUTCOME = pd.DataFrame.from_dict(new_FUPOUTCOME)
+        
+        #Add zeros to fill all the data
+        new_FUPOUTCOME[['hospfu', 'surgfu', 'chgoatfu', 'stpoatfu','bldscreenres', 'vtescreenres']] = [0,0,0,0,0,0]
+        
+        return new_FUPOUTCOME
+    
+    def get_zeroth_FUPPREDICTOR(self):
+        """Generates a zeroth FUP Predictor from the baseline information. This is to have an input for RNN for the patients w/o FUP.
+
+        Args:
+            patient (patient): The patient object.
+
+        Returns:
+            pd.dataframe: Dataframe of the fup outcome features.
+        """
+        new_FUPPREDICTOR = dict()
+
+        new_FUPPREDICTOR["fudt"] = self.BASELINE["dtbas"]
+        new_FUPPREDICTOR["cignumfu"] = self.BASELINE["cignum"]
+        new_FUPPREDICTOR["nummedfu"] = self.BASELINE["nummedbas"]
+        new_FUPPREDICTOR["ocpfu"] = self.BASELINE["ocpbas"]
+        new_FUPPREDICTOR["estrfu"] = self.BASELINE["estrbas"]
+        new_FUPPREDICTOR["platfu"] = self.BASELINE["platbas"]
+        new_FUPPREDICTOR["nsaidfu"] = self.BASELINE["nsaidbas"]
+        new_FUPPREDICTOR["amiofu"] = self.BASELINE["amiobas"]
+        new_FUPPREDICTOR["ssrifu"] = self.BASELINE["Amiodarone"] #SSRI is in fact encoded as AMIODARONE in the dataset
+        new_FUPPREDICTOR["statfu"] = self.BASELINE["statin"]
+        new_FUPPREDICTOR["antibfu"] = 0 #Most other values are zero
+        new_FUPPREDICTOR["wtfukg"] = self.BASELINE["wtbaskg"]
+        new_FUPPREDICTOR["uniqid"] = self.BASELINE["uniqid"]
+
+        #Create the pandas df
+        new_FUPPREDICTOR = pd.DataFrame.from_dict(new_FUPPREDICTOR)
+
+        new_FUPPREDICTOR[['hypertfu_Continue', 'hypertfu_New', 'hypertfu_No', 'hypertfu_Yes']] = [0,0,1,0]
+        new_FUPPREDICTOR[['diabmelfu_Continue', 'diabmelfu_New', 'diabmelfu_No', 'diabmelfu_Yes']] = [0,0,1,0]
+        new_FUPPREDICTOR[['mifu_Continue', 'mifu_New', 'mifu_No', 'mifu_Yes',]] = [0,0,1,0]
+        new_FUPPREDICTOR[['cvafu_Continue','cvafu_No', 'cvafu_Yes',]] = [0,1,0]
+        new_FUPPREDICTOR[['atrfibfu_Continue', 'atrfibfu_New','atrfibfu_No', 'atrfibfu_Yes']] = [0,0,1,0]
+        new_FUPPREDICTOR[['ptsfu_Continue', 'ptsfu_New','ptsfu_No', 'ptsfu_Yes']] = [0,0,1,0]
+        new_FUPPREDICTOR[['cancfu_Continue', 'cancfu_New', 'cancfu_No','cancfu_Yes']] = [0,0,1,0]
+        
+        return new_FUPPREDICTOR
+        
+        
     def fill_missing_fups(self):
         """Artificially fill the FUPPREDICTOR and FUPOUTCOME with a naive logic.
         """
         
         def fill_FUPOUTCOME(patient):
-            new_FUPOUTCOME = dict() #Empty dic
-
-            new_FUPOUTCOME["uniqid"] = patient.BASELINE["uniqid"]
-            new_FUPOUTCOME["fuodt"] = patient.BASELINE["dtbas"]
-
-            #Create the pandas df from dic
-            new_FUPOUTCOME = pd.DataFrame.from_dict(new_FUPOUTCOME)
-            
-            #Add zeros to fill all the data
-            new_FUPOUTCOME[['hospfu', 'surgfu', 'chgoatfu', 'stpoatfu','bldscreenres', 'vtescreenres']] = [0,0,0,0,0,0]
-            
             #Set the FUPOUTCOME
-            patient.FUPOUTCOME = new_FUPOUTCOME
+            patient.FUPOUTCOME = self.get_zeroth_FUPOUTCOME()
             patient.missing_FUP = True
               
         def fill_FUPPREDICTOR(patient):
-            new_FUPPREDICTOR = dict()
-
-            new_FUPPREDICTOR["fudt"] = patient.BASELINE["dtbas"]
-            new_FUPPREDICTOR["cignumfu"] = patient.BASELINE["cignum"]
-            new_FUPPREDICTOR["nummedfu"] = patient.BASELINE["nummedbas"]
-            new_FUPPREDICTOR["ocpfu"] = patient.BASELINE["ocpbas"]
-            new_FUPPREDICTOR["estrfu"] = patient.BASELINE["estrbas"]
-            new_FUPPREDICTOR["platfu"] = patient.BASELINE["platbas"]
-            new_FUPPREDICTOR["nsaidfu"] = patient.BASELINE["nsaidbas"]
-            new_FUPPREDICTOR["amiofu"] = patient.BASELINE["amiobas"]
-            new_FUPPREDICTOR["ssrifu"] = patient.BASELINE["Amiodarone"] #SSRI is in fact encoded as AMIODARONE in the dataset
-            new_FUPPREDICTOR["statfu"] = patient.BASELINE["statin"]
-            new_FUPPREDICTOR["antibfu"] = 0 #Most other values are zero
-            new_FUPPREDICTOR["wtfukg"] = patient.BASELINE["wtbaskg"]
-            new_FUPPREDICTOR["uniqid"] = patient.BASELINE["uniqid"]
-
-            #Create the pandas df
-            new_FUPPREDICTOR = pd.DataFrame.from_dict(new_FUPPREDICTOR)
-
-            new_FUPPREDICTOR[['hypertfu_Continue', 'hypertfu_New', 'hypertfu_No', 'hypertfu_Yes']] = [0,0,1,0]
-            new_FUPPREDICTOR[['diabmelfu_Continue', 'diabmelfu_New', 'diabmelfu_No', 'diabmelfu_Yes']] = [0,0,1,0]
-            new_FUPPREDICTOR[['mifu_Continue', 'mifu_New', 'mifu_No', 'mifu_Yes',]] = [0,0,1,0]
-            new_FUPPREDICTOR[['cvafu_Continue','cvafu_No', 'cvafu_Yes',]] = [0,1,0]
-            new_FUPPREDICTOR[['atrfibfu_Continue', 'atrfibfu_New','atrfibfu_No', 'atrfibfu_Yes']] = [0,0,1,0]
-            new_FUPPREDICTOR[['ptsfu_Continue', 'ptsfu_New','ptsfu_No', 'ptsfu_Yes']] = [0,0,1,0]
-            new_FUPPREDICTOR[['cancfu_Continue', 'cancfu_New', 'cancfu_No','cancfu_Yes']] = [0,0,1,0]
-
             #Set the FUPPREDICTOR
-            patient.FUPPREDICTOR = new_FUPPREDICTOR
+            patient.FUPPREDICTOR = self.get_zeroth_FUPPREDICTOR()
             patient.missing_FUP = True
                 
         if (self.FUPOUTCOME is None):
@@ -725,13 +768,25 @@ class Dataset():
             for patient in self:
                 patient.remove_FUP_after_bleeding_disc()
                 if len(patient.get_FUP_array()) == 0:
-                    patient.fill_missing_fups()
+                    patient.fill_missing_fups() #There are 11 patients whose discontinuation occur at baseline, so that's why we need to add the artificial FUP vector again.
                     patients_with_no_events_before_bleeding += 1
             
             print(f"Added one FUP vector with code to {patients_with_no_events_before_bleeding}/{len(self.all_patients)} of patients who don't have any event before bleeding/discontinuation.")
         else:
             raise Exception(f"The mode {mode} isn't defined in filter_patients_sequentially() function.")
-                        
+    
+    def add_zeroth_FUP_to_all_patients(self):
+        counter = 0
+        for patient in self:
+            if not patient.missing_FUP:
+                patient.FUPOUTCOME = pd.concat([patient.get_zeroth_FUPOUTCOME(), patient.FUPOUTCOME])
+                patient.FUPPREDICTOR = pd.concat([patient.get_zeroth_FUPPREDICTOR(), patient.FUPPREDICTOR])
+                counter += 1
+        
+        num_patients_with_missing_FUPS = len([patient for patient in self if patient.missing_FUP])
+        
+        print(f"The zeroth FUP was added for {counter} patients. Number of patients with no actual FUPs is {num_patients_with_missing_FUPS}.")
+                                 
     def sort_patients(self):
         """Sort patients in the dataset such that the patients with major bleeding are at the begining of the list.
         """

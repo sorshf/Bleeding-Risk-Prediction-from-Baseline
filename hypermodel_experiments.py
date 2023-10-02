@@ -457,7 +457,7 @@ def run_FUP_RNN_experiment(model_name,
     tuner = keras_tuner.RandomSearch(
                     FUP_RNN_HyperModel(name = model_name),
                     objective=keras_tuner.Objective(f"{metric_cv_calc_mode}_val_{metric_name}", metric_mode),
-                    max_trials=912,
+                    max_trials=1000,
                     seed=1375,
                     overwrite = overwrite,
                     directory=directory_name,
