@@ -125,8 +125,8 @@ def create_feature_set_dicts_baseline_and_FUP(baseline_dataframe, FUP_columns, t
 
         FUP_features_sets["all_features"] = list(range(len(FUP_columns)))
 
-        features_without_new_no_continue_yes = [feature for feature in FUP_columns if (feature.find("_Yes")==-1) & (feature.find("_No")==-1) & \
-                                                (feature.find("_Continue")==-1) & (feature.find("_New")==-1)]
+        features_without_new_no_continue_yes = [feature for feature in FUP_columns if (feature.find("(Yes)")==-1) & (feature.find("(No)")==-1) & \
+                                                (feature.find("(Continue)")==-1) & (feature.find("(New)")==-1)]
 
 
         FUP_features_sets["FUP_without_new_no_continue_yes"] = [FUP_columns.index(feature) for feature in features_without_new_no_continue_yes]
@@ -136,7 +136,8 @@ def create_feature_set_dicts_baseline_and_FUP(baseline_dataframe, FUP_columns, t
         stat_df = stat_df[stat_df["CRF"].isin(["FUPPREDICTOR", "FUPOUTCOME"])]
         high_varience_features = stat_df[(stat_df["percent_patients_all_zero"]<96) & (stat_df["percent_patients_all_one"]<96)]["feature"]
         
-        FUP_features_sets["high_varience_features"] = [FUP_columns.index(feature) for feature in high_varience_features]
+        #Note that get_counts_all_zero_or_one_stats returns the feature names without their name changes. So we use the following trick.
+        FUP_features_sets["high_varience_features"] = [list(patient_dataset.all_patients[10].get_FUP_array().columns).index(feature) for feature in high_varience_features]
         
         
     if mode == "only Baseline":
