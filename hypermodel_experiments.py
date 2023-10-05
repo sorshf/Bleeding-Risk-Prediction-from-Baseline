@@ -24,6 +24,45 @@ import matplotlib
 import os
 matplotlib.use("Agg")
 
+def get_predefined_training_testing_indeces_30_percent():
+    """Gets the predefined training-val (70% of data) and testing (30% of data) indeces.
+
+    Returns:
+        list, list: training_val_indeces, testing_indeces
+    """
+    predefined_indeces = pd.read_csv("./keras_tuner_results/training_testing_indeces.csv")
+    
+    for num_FUP in set(predefined_indeces["num_FUP"]):
+        total_FUP_positive = len(predefined_indeces[(predefined_indeces["num_FUP"]==num_FUP) & (predefined_indeces["target"] ==1)])
+        length_testing = len(predefined_indeces[(predefined_indeces["category"]=="testing")])
+        length_training_val = len(predefined_indeces[ (predefined_indeces["category"]=="training_val")])
+        
+        percent_positive_testing = len(predefined_indeces[(predefined_indeces["category"]=="testing") & 
+                                                        (predefined_indeces["target"]==1) &
+                                                        (predefined_indeces["num_FUP"]==num_FUP)])/ length_testing * 100
+        
+        percent_negative_testing = len(predefined_indeces[(predefined_indeces["category"]=="testing") & 
+                                                        (predefined_indeces["target"]==0) &
+                                                        (predefined_indeces["num_FUP"]==num_FUP)])/ length_testing * 100
+        
+        percent_positive_training_val = len(predefined_indeces[(predefined_indeces["category"]=="training_val") & 
+                                                        (predefined_indeces["target"]==1) &
+                                                        (predefined_indeces["num_FUP"]==num_FUP)])/ length_training_val * 100
+        
+        percent_negative_training_val = len(predefined_indeces[(predefined_indeces["category"]=="training_val") & 
+                                                        (predefined_indeces["target"]==0) &
+                                                        (predefined_indeces["num_FUP"]==num_FUP)])/ length_training_val * 100
+        
+        print(f"{total_FUP_positive} -> {num_FUP} FUPS: testing +: {percent_positive_testing:.5f} training_val +: {percent_positive_training_val:.5f} \
+        testing -: {percent_negative_testing:.5f} training_val -: {percent_negative_training_val:.5f}")
+    
+    
+    
+    training_val_indeces = list(predefined_indeces.loc[predefined_indeces["category"]=="training_val", "uniqids"])
+    testing_indeces = list(predefined_indeces.loc[predefined_indeces["category"]=="testing", "uniqids"])
+    
+    return training_val_indeces, testing_indeces
+
 
 def get_important_feature_dic_baseline(baseline_dataset, target_list):
     #This function is for feature selection
@@ -146,7 +185,11 @@ def run_baseline_dense_experiment(model_name,
     
     #Divide all the data into training and testing portions (two stratified parts) where the testing part consists 30% of the data
     #Note, the training_val and testing portions are generated deterministically.
-    training_val_indeces, testing_indeces = divide_into_stratified_fractions(FUPS_dict, target_series.copy(), fraction=0.3)
+    #training_val_indeces, testing_indeces = divide_into_stratified_fractions(FUPS_dict, target_series.copy(), fraction=0.3)
+    
+    #Despite divide_into_stratified_fractions being deterministic, small modifications in data, will change the order of indeces
+    #To make the code reproducible, even after modification in dataset, we will use the predefined set of indeces
+    training_val_indeces, testing_indeces = get_predefined_training_testing_indeces_30_percent()
     
     #Record the training_val and testing indeces
     record_training_testing_indeces(model_name, training_val_indeces, testing_indeces)
@@ -165,7 +208,7 @@ def run_baseline_dense_experiment(model_name,
     tuner = keras_tuner.RandomSearch(
                     BaselineHyperModel(name = model_name),
                     objective=keras_tuner.Objective(f"{metric_cv_calc_mode}_val_{metric_name}", metric_mode),
-                    max_trials=10000,
+                    max_trials=7,
                     seed=1375,
                     overwrite = overwrite,
                     directory=directory_name,
@@ -291,7 +334,11 @@ def run_lastFUP_dense_experiment(model_name,
         
     #Divide all the data into training and testing portions (two stratified parts) where the testing part consists 30% of the data
     #Note, the training_val and testing portions are generated deterministically.
-    training_val_indeces, testing_indeces = divide_into_stratified_fractions(FUPS_dict, target_series.copy(), fraction=0.3)
+    #training_val_indeces, testing_indeces = divide_into_stratified_fractions(FUPS_dict, target_series.copy(), fraction=0.3)
+    
+    #Despite divide_into_stratified_fractions being deterministic, small modifications in data, will change the order of indeces
+    #To make the code reproducible, even after modification in dataset, we will use the predefined set of indeces
+    training_val_indeces, testing_indeces = get_predefined_training_testing_indeces_30_percent()
 
     #record the indeces of the train_val and test dataset
     record_training_testing_indeces(model_name, training_val_indeces, testing_indeces)
@@ -436,7 +483,11 @@ def run_FUP_RNN_experiment(model_name,
         
     #Divide all the data into training and testing portions (two stratified parts) where the testing part consists 30% of the data
     #Note, the training_val and testing portions are generated deterministically.
-    training_val_indeces, testing_indeces = divide_into_stratified_fractions(FUPS_dict, target_series.copy(), fraction=0.3)
+    #training_val_indeces, testing_indeces = divide_into_stratified_fractions(FUPS_dict, target_series.copy(), fraction=0.3)
+    
+    #Despite divide_into_stratified_fractions being deterministic, small modifications in data, will change the order of indeces
+    #To make the code reproducible, even after modification in dataset, we will use the predefined set of indeces
+    training_val_indeces, testing_indeces = get_predefined_training_testing_indeces_30_percent()
 
     #Record the training_val and testing indeces
     record_training_testing_indeces(model_name, training_val_indeces, testing_indeces)
@@ -579,7 +630,11 @@ def run_Baseline_FUP_multiinput_experiment(model_name,
         
     #Divide all the data into training and testing portions (two stratified parts) where the testing part consists 30% of the data
     #Note, the training_val and testing portions are generated deterministically.
-    training_val_indeces, testing_indeces = divide_into_stratified_fractions(FUPS_dict, target_series.copy(), fraction=0.3)
+    #training_val_indeces, testing_indeces = divide_into_stratified_fractions(FUPS_dict, target_series.copy(), fraction=0.3)
+    
+    #Despite divide_into_stratified_fractions being deterministic, small modifications in data, will change the order of indeces
+    #To make the code reproducible, even after modification in dataset, we will use the predefined set of indeces
+    training_val_indeces, testing_indeces = get_predefined_training_testing_indeces_30_percent()
 
     #Record the training and testing indeces
     record_training_testing_indeces(model_name, training_val_indeces, testing_indeces)
@@ -721,7 +776,11 @@ def run_dummy_experiment(model_name,
         
     #Divide all the data into training and testing portions (two stratified parts) where the testing part consists 30% of the data
     #Note, the training_val and testing portions are generated deterministically.
-    training_val_indeces, testing_indeces = divide_into_stratified_fractions(FUPS_dict, target_series.copy(), fraction=0.3)
+    #training_val_indeces, testing_indeces = divide_into_stratified_fractions(FUPS_dict, target_series.copy(), fraction=0.3)
+    
+    #Despite divide_into_stratified_fractions being deterministic, small modifications in data, will change the order of indeces
+    #To make the code reproducible, even after modification in dataset, we will use the predefined set of indeces
+    training_val_indeces, testing_indeces = get_predefined_training_testing_indeces_30_percent()
     
     #Record the training_val and testing indeces
     record_training_testing_indeces(model_name, training_val_indeces, testing_indeces)
@@ -770,7 +829,11 @@ def run_ensemble_experiment(model_name,
         
     #Divide all the data into training and testing portions (two stratified parts) where the testing part consists 30% of the data
     #Note, the training_val and testing portions are generated deterministically.
-    training_val_indeces, testing_indeces = divide_into_stratified_fractions(FUPS_dict, target_series.copy(), fraction=0.3)
+    #training_val_indeces, testing_indeces = divide_into_stratified_fractions(FUPS_dict, target_series.copy(), fraction=0.3)
+    
+    #Despite divide_into_stratified_fractions being deterministic, small modifications in data, will change the order of indeces
+    #To make the code reproducible, even after modification in dataset, we will use the predefined set of indeces
+    training_val_indeces, testing_indeces = get_predefined_training_testing_indeces_30_percent()
 
     #Record the training and testing indeces
     record_training_testing_indeces(model_name, training_val_indeces, testing_indeces)
