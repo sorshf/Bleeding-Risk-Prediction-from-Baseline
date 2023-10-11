@@ -1,15 +1,5 @@
 #No folders
-all_data_pics/
-Chantal_bleeding_revisions/
-CRFs/
-fups_visualized/
-keras_tuner_results/
-no_events_patients/
-pickle_objects/
-Raw Data/
-Stats/
-results_pics/
-downloaded_from_AWS/
+*/
 
 #My experimental codes
 misceleanous.py

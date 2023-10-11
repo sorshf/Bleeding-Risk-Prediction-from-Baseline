@@ -16,12 +16,6 @@ import pandas as pd
 from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.utils.validation import check_X_y, check_is_fitted
 from sklearn.utils.multiclass import unique_labels
-from data_preparation import prepare_patient_dataset
-from constants import data_dir, instruction_dir, discrepency_dir
-import os
-from hypermodel_experiments import divide_into_stratified_fractions, get_X_y_from_indeces
-from hypermodel_experiments import record_training_testing_indeces
-from data_preparation import get_abb_to_long_dic
 
 
 class ClinicalScore(BaseEstimator, ClassifierMixin):
@@ -187,60 +181,3 @@ class ClinicalScore(BaseEstimator, ClassifierMixin):
             predictions_score = X.apply(lambda val: self.get_CHAP_Score(val), axis=1)
             
         return predictions_score
-        
-
-def main():
-    #Read the patient dataset
-    patient_dataset = prepare_patient_dataset(data_dir, instruction_dir, discrepency_dir)
-
-    #Remove patients without baseline, remove the FUPS after bleeding/termination, fill FUP data for those without FUP data
-    patient_dataset.filter_patients_sequentially(mode="fill_patients_without_FUP")
-    print(patient_dataset.get_all_targets_counts(), "\n")
-
-    #Add one feature to each patient indicating year since baseline to each FUP
-    patient_dataset.add_FUP_since_baseline()
-
-    #Get the BASELINE, and Follow-up data from patient dataset
-    FUPS_dict, _, baseline_dataframe, target_series = patient_dataset.get_data_x_y(baseline_filter=["uniqid", "dtbas", "vteindxdt", "stdyoatdt"], 
-                                                                                                FUP_filter=[])
-
-    #Divide all the data into training and testing portions (two stratified parts) where the testing part consists 30% of the data
-    #Note, the training_val and testing portions are generated deterministically.
-    training_val_indeces, testing_indeces = divide_into_stratified_fractions(FUPS_dict, target_series.copy(), fraction=0.3)
-    
-    for model_name in ['CHAP','ACCP','RIETE','VTE-BLEED','HAS-BLED','OBRI']:
-        #Create a dir to save the result of experiment
-        if not os.path.exists(f"./keras_tuner_results/{model_name}"):
-            os.makedirs(f"./keras_tuner_results/{model_name}")
-
-        #Record the training_val and testing indeces
-        record_training_testing_indeces(model_name, training_val_indeces, testing_indeces)
-
-        #Using the indeces for training_val, extract the training-val data from all the data in both BASELINE and follow-ups
-        #train_val data are used for hyperparameter optimization and training.
-        baseline_test_X, _, test_y = get_X_y_from_indeces(indeces = testing_indeces, 
-                                                                                baseline_data = baseline_dataframe, 
-                                                                                FUPS_data_dic = FUPS_dict, 
-                                                                                all_targets_data = target_series)
-        
-        #Change the names of the columns in the baseline data to make them compatible with the clinical score
-        abb_to_long_dic = get_abb_to_long_dic(instructions_dir=instruction_dir, CRF_name="BASELINE")
-        baseline_test_X.columns = [abb_to_long_dic[col] if col in abb_to_long_dic else col for col in baseline_test_X.columns]
-
-        #Create the score object
-        mychap_clf = ClinicalScore(model_name)
-
-        #Fitting doesn't do anything special, it is just rerequired for the class
-        mychap_clf = mychap_clf.fit(baseline_test_X, test_y)
-
-        #Record exactly what are the predictions for each sample on the test dataset
-        y_pred_classes = mychap_clf.predict(baseline_test_X)
-        y_pred = mychap_clf.predict(baseline_test_X, mode="score")
-        
-        number_of_FUP = [len(FUPS_dict[uniqid]) for uniqid in list(test_y.index)]
-        record_dict = {"uniqid":list(test_y.index),"FUP_numbers":number_of_FUP, "y_actual":test_y.values, "y_pred":y_pred,
-                    "y_pred_classes":y_pred_classes}
-
-        #Save the detailed results
-        pd.DataFrame(record_dict).to_csv(f"keras_tuner_results/{model_name}/{model_name}_detailed_test_results.csv")
-        

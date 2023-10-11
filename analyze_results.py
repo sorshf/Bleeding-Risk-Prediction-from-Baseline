@@ -4,7 +4,6 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 plt.rcParams["font.family"] = "Times New Roman"
-from clinical_score import main as clinical_score_main
 import json
 import os as os
 from venn import venn
@@ -13,8 +12,7 @@ from cross_validation import divide_into_stratified_fractions, get_X_y_from_inde
 from hypermodel_experiments import create_feature_set_dicts_baseline_and_FUP
 import copy
 
-from data_preparation import prepare_patient_dataset
-from constants import data_dir, instruction_dir, discrepency_dir, timeseries_padding_value
+from constants import instruction_dir, timeseries_padding_value
 from tensorflow import keras
 from data_preparation import get_abb_to_long_dic
 import re
@@ -25,6 +23,10 @@ from mlxtend.evaluate import mcnemar
 from matplotlib import colors
 import random 
 
+from train import get_formatted_Baseline_FUP
+from hypermodel_experiments import get_predefined_training_testing_indeces_30_percent
+from hypermodel_experiments import record_training_testing_indeces
+from clinical_score import ClinicalScore
 
 from statistical_tests import correct_p_values, plot_p_value_heatmap
 
@@ -275,8 +277,11 @@ def save_deatiled_metrics_test():
                 tp,
                 tf.math.add(tp, fp)).numpy()
         
+        accuracy = (tn+tp)/(tn+tp+fp+fn)
+        
         all_data.append({
             "Name": model_paper_dic[model_name],
+            "Accuracy": round(accuracy, 3),
             "PR_AUC": round(PR_AUC, 3),
             "ROC_AUC": round(ROC_AUC, 3),
             "Precision": round(precision, 3),
@@ -304,6 +309,7 @@ def plot_ROC_PR():
 
 
         for model_name, color in zip(model_names, list(sns.color_palette("colorblind", len(model_names)))):
+            #model_name = "CHAP"
             detailed_test_res = pd.read_csv(f"./keras_tuner_results/{model_name}/{model_name}_detailed_test_results.csv")
             
             y_pred = np.array(detailed_test_res["y_pred"])
@@ -315,10 +321,11 @@ def plot_ROC_PR():
             if model_name in model_dict["Clinical_models"]:
                 marker = "--"
             else:
-                marker = "*-"
+                marker = "-"
             
 
             plt.plot(FPR, recall_curve, marker, label=f"{model_name} {ROC_AUC:.3}",linewidth=1.2,markersize=4, color=color)
+            #break
             
         #The random classifier
         plt.plot([0,1], [0, 1], ":", color="black", label="Random_clf 0.50")
@@ -360,7 +367,7 @@ def plot_ROC_PR():
             if model_name in model_dict["Clinical_models"]:
                 marker = "--"
             else:
-                marker = "*-"
+                marker = "-"
             
 
             plt.plot(recall_curve, precision_curve, marker, label=f"{model_name} {PR_AUC:.3}",linewidth=1.2,markersize=4, color=color)
@@ -394,37 +401,24 @@ def plot_ROC_PR():
 def plot_confusion_matrix():
     """Plot confusion matrix for all of the ML models and Clinical models.
     """
-
-    #Read the patient dataset
-    patient_dataset = prepare_patient_dataset(data_dir, instruction_dir, discrepency_dir)
-
-    #Remove patients without baseline, remove the FUPS after bleeding/termination, fill FUP data for those without FUP data
-    patient_dataset.filter_patients_sequentially(mode="fill_patients_without_FUP")
-    print(patient_dataset.get_all_targets_counts(), "\n")
-
-    #Add one feature to each patient indicating year since baseline to each FUP
-    patient_dataset.add_FUP_since_baseline()
-
-    #Get the BASELINE, and Follow-up data from patient dataset
-    FUPS_dict, list_FUP_cols, baseline_dataframe, target_series = patient_dataset.get_data_x_y(baseline_filter=["uniqid", "dtbas", "vteindxdt", "stdyoatdt", "inrbas"], 
-                                                                                                FUP_filter=[])
-
-    print(f"Follow-up data has {len(FUPS_dict)} examples and {len(list_FUP_cols)} features.")
-    print(f"Baseline data has {len(baseline_dataframe)} examples and {len(baseline_dataframe.columns)} features.")
-    print(f"The target data has {len(target_series)} data.", "\n")
     
+    #Adding the custom color bar to the confusion matrices
+    cmap = (colors.ListedColormap(['#440154', '#3b528b', '#21918c', '#5ec962', '#fde725'])
+        .with_extremes(over='9e-3', under='9e-4'))
+    bounds = [0, 0.5, 10, 20, 100, 1000]
+    norm = colors.BoundaryNorm(bounds, cmap.N)
     
     
     for name in model_dict["All_models"]:
         
         detailed_test_res = pd.read_csv(f"./keras_tuner_results/{name}/{name}_detailed_test_results.csv")
         
-        detailed_test_res["FUP_numbers"] = detailed_test_res.apply(lambda x: 0 if patient_dataset[int(x['uniqid'])].missing_FUP else x["FUP_numbers"], axis=1)
+        detailed_test_res["FUP_numbers"] = detailed_test_res.apply(lambda x: x["FUP_numbers"]-1, axis=1)
 
         mosaic = [["All","All","All", "0", "1", "2", "3", "4", "5", "6"],
                 ["All","All","All", "7", "8", "9", "10", "11", "12", "13"]]
 
-        fig, axd = plt.subplot_mosaic(mosaic, figsize=(13, 4), layout="constrained")
+        fig, axd = plt.subplot_mosaic(mosaic, figsize=(13.5, 4), layout="constrained")
 
         for fup_num in ["All", "0", "1", "2", "3", "4", "5", "6","7", "8", "9", "10", "11", "12"]:
             
@@ -434,13 +428,13 @@ def plot_confusion_matrix():
                     [fn,tp]]
             
             if fup_num != "All":
-                sns.heatmap(heatmap, annot=True,linewidths=0.1,cmap=sns.color_palette("viridis", as_cmap=True), square=True, 
+                sns.heatmap(heatmap, annot=True,linewidths=2,cmap=cmap, norm=norm, square=True, 
                             annot_kws={"size": 11}, fmt="g", ax=axd[fup_num], cbar=False)
                 label_size = 8
                 
             else:
-                sns.heatmap(heatmap, annot=True,linewidths=0.1,cmap=sns.color_palette("viridis", as_cmap=True), square=True, 
-                            annot_kws={"size": 15}, fmt="g", ax=axd[fup_num], cbar=False)
+                sns.heatmap(heatmap, annot=True,linewidths=4,cmap=cmap, norm=norm, square=True, 
+                            annot_kws={"size": 15}, fmt="g", ax=axd[fup_num], cbar=True, cbar_kws = dict(use_gridspec=False,location="left"))
                 
                 
                 label_size = 16
@@ -606,28 +600,16 @@ def create_feature_sets_json():
     """
 
 
-        
-    #Read the patient dataset
-    patient_dataset = prepare_patient_dataset(data_dir, instruction_dir, discrepency_dir)
-
-    #Remove patients without baseline, remove the FUPS after bleeding/termination, fill FUP data for those without FUP data
-    patient_dataset.filter_patients_sequentially(mode="fill_patients_without_FUP")
-    print(patient_dataset.get_all_targets_counts(), "\n")
-
-    #Add one feature to each patient indicating year since baseline to each FUP
-    patient_dataset.add_FUP_since_baseline()
-
-    #Get the BASELINE, and Follow-up data from patient dataset
-    FUPS_dict, list_FUP_cols, baseline_dataframe, target_series = patient_dataset.get_data_x_y(baseline_filter=["uniqid", "dtbas", "vteindxdt", "stdyoatdt", "inrbas", "noinrbas"], 
-                                                                                                FUP_filter=[])
-    print(f"Follow-up data has {len(FUPS_dict)} examples and {len(list_FUP_cols)} features.")
-    print(f"Baseline data has {len(baseline_dataframe)} examples and {len(baseline_dataframe.columns)} features.")
-    print(f"The target data has {len(target_series)} data.", "\n")
+    patient_dataset, FUPS_dict, list_FUP_cols, baseline_dataframe, target_series = get_formatted_Baseline_FUP(mode="Formatted")
     
 
     #Divide all the data into training and testing portions (two stratified parts) where the testing part consists 30% of the data
     #Note, the training_val and testing portions are generated deterministically.
-    training_val_indeces, testing_indeces = divide_into_stratified_fractions(FUPS_dict, target_series.copy(), fraction=0.3)
+    #training_val_indeces, testing_indeces = divide_into_stratified_fractions(FUPS_dict, target_series.copy(), fraction=0.3)
+    
+    #Despite divide_into_stratified_fractions being deterministic, small modifications in data, will change the order of indeces
+    #To make the code reproducible, even after modification in dataset, we will use the predefined set of indeces
+    training_val_indeces, testing_indeces = get_predefined_training_testing_indeces_30_percent()
 
 
     #Using the indeces for training_val, extract the training-val data from all the data in both BASELINE and follow-ups
@@ -656,29 +638,34 @@ def create_feature_sets_json():
 
     with open("./keras_tuner_results/feature_sets.json", 'w') as file:
         file.write(json.dumps(feature_selection_dict))
+    
+    #######################
+    #Read the json file and save it as csv  
+        
+    with open("./keras_tuner_results/feature_sets.json") as f:
+        data = json.load(f)
+    
+    def concat_list_contents(list_):
+        content = ""
+        for i, item in enumerate(list_):
+            sep = "" if i == 0 else ", "
+            content = content + sep + str(item)
+        return content.replace("\u2014", "-")
+
+    new_dict = dict()
+
+    for feature_type in data.keys():
+        for feature_set in data[feature_type].keys():
+            new_dict[feature_set] = concat_list_contents(data[feature_type][feature_set])
+            
+    pd.DataFrame.from_dict(new_dict, orient="index").to_csv("./keras_tuner_results/feature_sets.csv")
 
 
 def plot_FUP_count_density():
     """Plots the count and density diagrams for the patients' number of follow-ups.
     """
     
-    #Read the patient dataset
-    patient_dataset = prepare_patient_dataset(data_dir, instruction_dir, discrepency_dir)
-
-    #Remove patients without baseline, remove the FUPS after bleeding/termination, fill FUP data for those without FUP data
-    patient_dataset.filter_patients_sequentially(mode="fill_patients_without_FUP")
-    print(patient_dataset.get_all_targets_counts(), "\n")
-
-    #Add one feature to each patient indicating year since baseline to each FUP
-    patient_dataset.add_FUP_since_baseline()
-
-    #Get the BASELINE, and Follow-up data from patient dataset
-    FUPS_dict, list_FUP_cols, baseline_dataframe, target_series = patient_dataset.get_data_x_y(baseline_filter=["uniqid", "dtbas", "vteindxdt", "stdyoatdt", "inrbas"], 
-                                                                                                FUP_filter=[])
-
-    print(f"Follow-up data has {len(FUPS_dict)} examples and {len(list_FUP_cols)} features.")
-    print(f"Baseline data has {len(baseline_dataframe)} examples and {len(baseline_dataframe.columns)} features.")
-    print(f"The target data has {len(target_series)} data.", "\n")
+    patient_dataset, FUPS_dict, list_FUP_cols, baseline_dataframe, target_series = get_formatted_Baseline_FUP(mode="Formatted")
     
     
     
@@ -687,17 +674,17 @@ def plot_FUP_count_density():
 
     for patient in patient_dataset:
         #For the bleeders
-        if (patient.get_target() == 1): #If the fup was artificial, apped zero (meaning no real fup) to the list
+        if (patient.get_target() == 1): 
             if patient.missing_FUP:
-                bleeding_frequency.append(0)            
+                bleeding_frequency.append(0)           
             else:
-                bleeding_frequency.append(len(patient.get_FUP_array()))
+                bleeding_frequency.append(len(patient.get_FUP_array())-1) #-1 is because all of the patients had zeroth FUP
         #For the non-bleeders
         else:
-            if patient.missing_FUP: #If the fup was artificial, apped zero (meaning no real fup) to the list
+            if patient.missing_FUP: 
                 non_bleeder_frequency.append(0)            
             else:
-                non_bleeder_frequency.append(len(patient.get_FUP_array()))
+                non_bleeder_frequency.append(len(patient.get_FUP_array())-1) #-1 is because all of the patients had zeroth FUP
     
     
     #unique frequencies of FUPs        
@@ -742,30 +729,17 @@ def plot_FUP_count_density():
 def plot_permutaion_feature_importance_RNN_FUP(number_of_permutations=100):
     """Plot permutation importance figures for the FUP_RNN model.
     """
-    
-    #Read the patient dataset
-    patient_dataset = prepare_patient_dataset(data_dir, instruction_dir, discrepency_dir)
-
-    #Remove patients without baseline, remove the FUPS after bleeding/termination, fill FUP data for those without FUP data
-    patient_dataset.filter_patients_sequentially(mode="fill_patients_without_FUP")
-    print(patient_dataset.get_all_targets_counts(), "\n")
-
-    #Add one feature to each patient indicating year since baseline to each FUP
-    patient_dataset.add_FUP_since_baseline()
-
-    #Get the BASELINE, and Follow-up data from patient dataset
-    FUPS_dict, list_FUP_cols, baseline_dataframe, target_series = patient_dataset.get_data_x_y(baseline_filter=["uniqid", "dtbas", "vteindxdt", "stdyoatdt", "inrbas"], 
-                                                                                                FUP_filter=[])
-
-    print(f"Follow-up data has {len(FUPS_dict)} examples and {len(list_FUP_cols)} features.")
-    print(f"Baseline data has {len(baseline_dataframe)} examples and {len(baseline_dataframe.columns)} features.")
-    print(f"The target data has {len(target_series)} data.", "\n")
+        
+    _, FUPS_dict, list_FUP_cols, baseline_dataframe, target_series = get_formatted_Baseline_FUP(mode="Formatted")
 
 
     #Divide all the data into training and testing portions (two stratified parts) where the testing part consists 30% of the data
     #Note, the training_val and testing portions are generated deterministically.
-    training_val_indeces, testing_indeces = divide_into_stratified_fractions(FUPS_dict, target_series.copy(), fraction=0.3)
+    #training_val_indeces, testing_indeces = divide_into_stratified_fractions(FUPS_dict, target_series.copy(), fraction=0.3)
 
+    #Despite divide_into_stratified_fractions being deterministic, small modifications in data, will change the order of indeces
+    #To make the code reproducible, even after modification in dataset, we will use the predefined set of indeces
+    training_val_indeces, testing_indeces = get_predefined_training_testing_indeces_30_percent()
 
     #Standardize the training data, and the test data.
     _ , norm_test_data = normalize_training_validation(training_indeces = training_val_indeces, 
@@ -777,6 +751,10 @@ def plot_permutaion_feature_importance_RNN_FUP(number_of_permutations=100):
 
     #unwrap the training-val and testing variables
     _ , norm_test_fups_X, test_y = norm_test_data
+    
+    
+    SUM_PADDED_FUP = timeseries_padding_value * norm_test_fups_X.shape[-1]
+
 
     #Load the saved model
     model = keras.models.load_model("./keras_tuner_results/FUP_RNN/FUP_RNN.h5")
@@ -790,8 +768,8 @@ def plot_permutaion_feature_importance_RNN_FUP(number_of_permutations=100):
 
     #Create a copy of the test data, vertically stack them along the time axis, then get rid of the padded sequences
     test_fups_2_dims = copy.deepcopy(norm_test_fups_X)
-    test_fups_2_dims = test_fups_2_dims.reshape(754*13, 45)
-    random_sampling_fups_dataset = test_fups_2_dims[np.sum(test_fups_2_dims, axis=1)!=-225.0]
+    test_fups_2_dims = test_fups_2_dims.reshape(test_fups_2_dims.shape[0] * test_fups_2_dims.shape[1], test_fups_2_dims.shape[2]) #reshape(754*14, 45)
+    random_sampling_fups_dataset = test_fups_2_dims[np.sum(test_fups_2_dims, axis=1) != SUM_PADDED_FUP]
 
 
     #A function to purtub time series dataset
@@ -802,7 +780,7 @@ def plot_permutaion_feature_importance_RNN_FUP(number_of_permutations=100):
         for patient in copy.deepcopy(test_fups_X):
             new_timesteps = []
             for time in patient:
-                if np.sum(time) != -225.0:
+                if np.sum(time) != SUM_PADDED_FUP:
                     time[column_index] = np.random.choice(random_sampling_fups_dataset[:,column_index])
                     new_timesteps.append(time)
                 else:
@@ -813,16 +791,6 @@ def plot_permutaion_feature_importance_RNN_FUP(number_of_permutations=100):
         return np.array(purturbed_patients_list)
 
 
-    #Create a dictionary to convert abbreviations to long names
-    FUPPREDICTOR_dic = get_abb_to_long_dic(instructions_dir="./Raw Data/column_preprocessing_excel test_Mar13_2022.xlsx", 
-                                    CRF_name="FUPPREDICTOR")
-    FUPOUTCOME_dic = get_abb_to_long_dic(instructions_dir="./Raw Data/column_preprocessing_excel test_Mar13_2022.xlsx", 
-                                    CRF_name="FUPOUTCOME")
-
-    abb_dict = dict(FUPPREDICTOR_dic)
-    abb_dict.update(FUPOUTCOME_dic.items())
-
-
     #Add space in the names of the features to make them look good on figures
     def turn_space_into_newline(a_string):
         spaces_list = [a.start() for a in re.finditer(" ", a_string)]
@@ -831,27 +799,8 @@ def plot_permutaion_feature_importance_RNN_FUP(number_of_permutations=100):
             s[spaces_list[int(len(spaces_list)/2)-1]] = "\n"
         return "".join(s)
 
-
-    #New list of column names
-    new_FUP_col_list = []
-
-    abb_dict["years-since-baseline-visit"] = "Years since baseline visit"
-
-    #Getting rid of the Follow-up and also change the names of the columns to their long format name
-    for col in list_FUP_cols:
-        if "_" in col:
-            if col.split("_")[1] in ["Yes", "No", "Continue", "New"]:
-                new_FUP_col_list.append(abb_dict[col.split("_")[0]].replace(" Follow-up", '')+f" ({col.split('_')[1]})")
-            else:
-                new_FUP_col_list.append(abb_dict[col.split("_")[0]].replace(" Follow-up", ''))
-        else:
-            if col in abb_dict:
-                new_FUP_col_list.append(abb_dict[col].replace(" Follow-up", ''))
-            else:
-                new_FUP_col_list.append(col)
                 
-    new_FUP_col_list = [turn_space_into_newline(col) for col in new_FUP_col_list]
-
+    new_FUP_col_list = [turn_space_into_newline(col) for col in list_FUP_cols]
 
 
     # For each column in FUP test set
@@ -879,11 +828,12 @@ def plot_permutaion_feature_importance_RNN_FUP(number_of_permutations=100):
 
     color2 = sns.color_palette("colorblind", 15)
     
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11,5))
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11,3))
 
 
     data_plot = pd.DataFrame.from_dict({k: v for k, v in sorted(roc_permutation_results.items(), key=lambda item: np.mean(item[1]), reverse=True)})
-    data_plot = pd.concat([data_plot.iloc[:,0:5], data_plot.iloc[:,-5:]], join='outer', axis=1)
+    data_plot.to_pickle("./results_pics/permutation_test_results.pkl")
+    data_plot = data_plot.iloc[:,0:5]
     #ax1.boxplot(data_plot, vert=False)
     sns.boxplot(data_plot, ax=ax1, orient='h', color=color2[9], showfliers = False)
     # ax1.set_yticklabels(data_plot.columns, fontsize=8)
@@ -896,7 +846,7 @@ def plot_permutaion_feature_importance_RNN_FUP(number_of_permutations=100):
 
     data_plot = pd.DataFrame.from_dict({k: v for k, v in sorted(prc_permutation_results.items(), key=lambda item: np.mean(item[1]), reverse=True)})
     #ax2.boxplot(data_plot, vert=False)
-    data_plot = pd.concat([data_plot.iloc[:,0:5], data_plot.iloc[:,-5 :]], join='outer', axis=1)
+    data_plot = data_plot.iloc[:,0:5]
 
     sns.boxplot(data_plot, ax=ax2, orient='h',color=color2[9],showfliers = False)
     # ax2.set_yticklabels(data_plot.columns, fontsize=8)
@@ -990,7 +940,7 @@ def mcnemar_analysis():
             stat_test_results.loc[model_1, model_2] = "{:.2e}".format(p_value)
             
     #Correct p-values for multiple hypothesis testing
-    stat_test_results_corrected, multitest_correction = correct_p_values(stat_test_results, multitest_correction="bonferroni")
+    stat_test_results_corrected, multitest_correction = correct_p_values(stat_test_results, multitest_correction="fdr_bh")
     
     #Plot the hitmap of p_values
     plot_p_value_heatmap(stat_test_results_corrected, effect_size_df=None, title="McNemar test",
@@ -1019,7 +969,7 @@ def mcnemar_analysis():
 
     ax.set_title(f"Cochrane's Q test p-value is {p_value_cochrane:.3g}")
 
-    plt.savefig("./results_pics/mcnemar.pdf", transparent=False, bbox_inches="tight") 
+    plt.savefig("./results_pics/mcnemar_uncorrected.pdf", transparent=False, bbox_inches="tight") 
     
 
 def plot_FUP_RNN_probabilities_output():
@@ -1027,29 +977,16 @@ def plot_FUP_RNN_probabilities_output():
        subset of non-bleeders in the test set.
     """
     
-    #Read the patient dataset
-    patient_dataset = prepare_patient_dataset(data_dir, instruction_dir, discrepency_dir)
-
-    #Remove patients without baseline, remove the FUPS after bleeding/termination, fill FUP data for those without FUP data
-    patient_dataset.filter_patients_sequentially(mode="fill_patients_without_FUP")
-    print(patient_dataset.get_all_targets_counts(), "\n")
-
-    #Add one feature to each patient indicating year since baseline to each FUP
-    patient_dataset.add_FUP_since_baseline()
-
-    #Get the BASELINE, and Follow-up data from patient dataset
-    FUPS_dict, list_FUP_cols, baseline_dataframe, target_series = patient_dataset.get_data_x_y(baseline_filter=["uniqid", "dtbas", "vteindxdt", "stdyoatdt", "inrbas"], 
-                                                                                                FUP_filter=[])
-
-    print(f"Follow-up data has {len(FUPS_dict)} examples and {len(list_FUP_cols)} features.")
-    print(f"Baseline data has {len(baseline_dataframe)} examples and {len(baseline_dataframe.columns)} features.")
-    print(f"The target data has {len(target_series)} data.", "\n")
+    patient_dataset, FUPS_dict, list_FUP_cols, baseline_dataframe, target_series = get_formatted_Baseline_FUP(mode="Formatted")
 
 
     #Divide all the data into training and testing portions (two stratified parts) where the testing part consists 30% of the data
     #Note, the training_val and testing portions are generated deterministically.
-    training_val_indeces, testing_indeces = divide_into_stratified_fractions(FUPS_dict, target_series.copy(), fraction=0.3)
-
+    #training_val_indeces, testing_indeces = divide_into_stratified_fractions(FUPS_dict, target_series.copy(), fraction=0.3)
+    
+    #Despite divide_into_stratified_fractions being deterministic, small modifications in data, will change the order of indeces
+    #To make the code reproducible, even after modification in dataset, we will use the predefined set of indeces
+    training_val_indeces, testing_indeces = get_predefined_training_testing_indeces_30_percent()
 
     #Standardize the training data, and the test data.
     _ , norm_test_data = normalize_training_validation(training_indeces = training_val_indeces, 
@@ -1061,6 +998,8 @@ def plot_FUP_RNN_probabilities_output():
 
     #unwrap the training-val and testing variables
     _ , norm_test_fups_X, test_y = norm_test_data
+    
+    SUM_PADDED_FUP = timeseries_padding_value * norm_test_fups_X.shape[-1]
 
     #Load the saved model
     model = keras.models.load_model("./keras_tuner_results/FUP_RNN/FUP_RNN.h5")
@@ -1075,7 +1014,7 @@ def plot_FUP_RNN_probabilities_output():
         all_prob = []
         
         for t in range(13):
-            if np.sum(norm_test_fups_X[i:i+1,t:t+1,:]) == -225.0: #These are the timestamps that were padded
+            if np.sum(norm_test_fups_X[i:i+1,t:t+1,:]) == SUM_PADDED_FUP: #These are the timestamps that were padded
                 break
             
             prob = model.predict(norm_test_fups_X[i:i+1,0:t+1,:])
@@ -1196,35 +1135,83 @@ def plot_FUP_RNN_probabilities_output():
     
     draw_probability_FUP_RNN(dict_of_id_to_num_FUP=id_to_num_FUP_dict_neg, dict_of_probabilities_progression=probability_progression, color='blue', name="non_bleeders")               
     draw_probability_FUP_RNN(dict_of_id_to_num_FUP=id_to_num_FUP_dict_pos, dict_of_probabilities_progression=probability_progression, color='red', name="bleeders")   
+
+def get_clinical_scores_performance():
     
+    _, FUPS_dict, _, baseline_dataframe, target_series = get_formatted_Baseline_FUP(mode="Raw")
+    
+
+    #Divide all the data into training and testing portions (two stratified parts) where the testing part consists 30% of the data
+    #Note, the training_val and testing portions are generated deterministically.
+    #training_val_indeces, testing_indeces = divide_into_stratified_fractions(FUPS_dict, target_series.copy(), fraction=0.3)
+    
+    #Despite divide_into_stratified_fractions being deterministic, small modifications in data, will change the order of indeces
+    #To make the code reproducible, even after modification in dataset, we will use the predefined set of indeces
+    training_val_indeces, testing_indeces = get_predefined_training_testing_indeces_30_percent()
+    
+    for model_name in ['CHAP','ACCP','RIETE','VTE-BLEED','HAS-BLED','OBRI']:
+        #Create a dir to save the result of experiment
+        if not os.path.exists(f"./keras_tuner_results/{model_name}"):
+            os.makedirs(f"./keras_tuner_results/{model_name}")
+
+        #Record the training_val and testing indeces
+        record_training_testing_indeces(model_name, training_val_indeces, testing_indeces)
+
+        #Using the indeces for training_val, extract the training-val data from all the data in both BASELINE and follow-ups
+        #train_val data are used for hyperparameter optimization and training.
+        baseline_test_X, _, test_y = get_X_y_from_indeces(indeces = testing_indeces, 
+                                                        baseline_data = baseline_dataframe, 
+                                                        FUPS_data_dic = FUPS_dict, 
+                                                        all_targets_data = target_series)
+        
+        #Change the names of the columns in the baseline data to make them compatible with the clinical score
+        abb_to_long_dic = get_abb_to_long_dic(instructions_dir=instruction_dir, CRF_name="BASELINE")
+        baseline_test_X.columns = [abb_to_long_dic[col] if col in abb_to_long_dic else col for col in baseline_test_X.columns]
+
+        #Create the score object
+        mychap_clf = ClinicalScore(model_name)
+
+        #Fitting doesn't do anything special, it is just rerequired for the class
+        mychap_clf = mychap_clf.fit(baseline_test_X, test_y)
+
+        #Record exactly what are the predictions for each sample on the test dataset
+        y_pred_classes = mychap_clf.predict(baseline_test_X)
+        y_pred = mychap_clf.predict(baseline_test_X, mode="score")
+        
+        number_of_FUP = [len(FUPS_dict[uniqid]) for uniqid in list(test_y.index)]
+        record_dict = {"uniqid":list(test_y.index),"FUP_numbers":number_of_FUP, "y_actual":test_y.values, "y_pred":y_pred,
+                    "y_pred_classes":y_pred_classes}
+
+        #Save the detailed results
+        pd.DataFrame(record_dict).to_csv(f"keras_tuner_results/{model_name}/{model_name}_detailed_test_results.csv")    
                
 def main():
     
-    # create_feature_sets_json()
+    #create_feature_sets_json()
     
-    # clinical_score_main()
+    #get_clinical_scores_performance() #################
     
     # plot_iterated_k_fold_scores()
     
     # plot_validations_train_test()
     
-    # plot_ROC_PR()           ##################################
+    # plot_ROC_PR()     ##################      
     
-    # plot_confusion_matrix()          ##################################
+    # plot_confusion_matrix()       ################# 
     
     # extract_the_best_hps(number_of_best_hps=200)
     
     # get_tn_fp_fn_tn()
 
-    # save_deatiled_metrics_test()
+    #save_deatiled_metrics_test()
     
-    # plot_FUP_count_density()            ##################################
+    # plot_FUP_count_density()    
         
-    # plot_permutaion_feature_importance_RNN_FUP()            ##################################
+    #plot_permutaion_feature_importance_RNN_FUP()    
     
-    # mcnemar_analysis()
+    mcnemar_analysis()
     
-    plot_FUP_RNN_probabilities_output()
+    # plot_FUP_RNN_probabilities_output()
     
 if __name__=="__main__":
     main()
