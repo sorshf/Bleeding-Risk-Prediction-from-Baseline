@@ -864,6 +864,7 @@ def perform_unsupervised_learning():
     alphas = [1 if status != "Non-bleeders" else 1 for status in bleeding_since_baseline_category]
     zorders = [3 if status != "Non-bleeders" else -1 for status in bleeding_since_baseline_category ]
     markers = ["X" if status != "Non-bleeders" else "o" for status in bleeding_since_baseline_category ]
+    point_size = [40 if status != "Non-bleeders" else 14 for status in bleeding_since_baseline_category ]
     edgecolors = ["yellow" if status != "Non-bleeders" else None for status in bleeding_since_baseline_category ]
 
 
@@ -878,8 +879,8 @@ def perform_unsupervised_learning():
         colors = ["#f98e09" if label != 0 else "#57106e" for label in clusters.labels_]
 
 
-        for i, (color, alpha, zorder, label, marker, edgecolor) in enumerate(zip(colors, alphas, zorders, bleeding_since_baseline_category, markers, edgecolors)):
-            ax.scatter(X_PCA[i,0], X_PCA[i,1], marker=marker, c = color, s=14, linewidth=0.1, label=label, zorder= zorder, 
+        for i, (color, alpha, zorder, label, marker, edgecolor, s_size) in enumerate(zip(colors, alphas, zorders, bleeding_since_baseline_category, markers, edgecolors, point_size)):
+            ax.scatter(X_PCA[i,0], X_PCA[i,1], marker=marker, c = color, s=s_size, linewidth=0.3, label=label, zorder= zorder, 
                     alpha=alpha, edgecolors=edgecolor)
 
         # legend_without_duplicate_labels(ax)
