@@ -675,13 +675,13 @@ class Baseline_FUP_Multiinput_HyperModel(keras_tuner.HyperModel):
         num_layers_LSTM_fup = hp.Int("num_layers_LSTM_fup", 1, 1)
         
         #Number of nodes in the hidden layer(s)
-        num_nodes_LSTM_FUP = hp.Choice("LSTM_layer_units", [90])
+        num_nodes_LSTM_FUP = hp.Choice("LSTM_layer_units", [45])
         
         #The choice of regularizer for the layer
         #regularizer_LSTM_FUP = hp.Choice('regularizer_LSTM_FUP', ["None", "l1_0.01", "l2_0.01", "l1_l2_0.01"])
         
         #Dropout layer's rate
-        recurrent_dropout_rate = hp.Choice('recurrent_dropout_rate_LSTM', [0.10, 0.25, 0.50])
+        recurrent_dropout_rate = hp.Choice('recurrent_dropout_rate_LSTM', [0.25, 0.50, 0.75])
         
         #Adding 1 or 2 hidden layers where each layer has 5 - 50 nodes
         for i in range(num_layers_LSTM_fup):
@@ -707,10 +707,10 @@ class Baseline_FUP_Multiinput_HyperModel(keras_tuner.HyperModel):
         xy = tf.keras.layers.concatenate([x, y])
         
         #Number of nodes in the final dense layer
-        num_final_nodes = (num_nodes_hidden_baseline+num_nodes_LSTM_FUP)//2
+        num_final_nodes = 5 #(num_nodes_hidden_baseline+num_nodes_LSTM_FUP)//2
         
         #Final dropout rate
-        final_dropout_rate = hp.Choice('final_dropout_rate', [0.25, 0.50])
+        final_dropout_rate = hp.Choice('final_dropout_rate', [0.50, 0.75])
         
         
         dense = tf.keras.layers.Dense(
@@ -841,7 +841,7 @@ class Baseline_FUP_Multiinput_HyperModel(keras_tuner.HyperModel):
                     history = model.fit(
                         x = [baseline_train_X, fups_train_X],
                         y = train_y,
-                        callbacks = [tf.keras.callbacks.EarlyStopping(monitor=f"val_{metric_name}", mode=metric_mode, patience=10)],
+                        callbacks = [tf.keras.callbacks.EarlyStopping(monitor=f"val_{metric_name}", mode=metric_mode, patience=7)],
                         validation_data = ([baseline_valid_X ,fups_valid_X], valid_y),
                         class_weight = class_weight,
                         **kwargs

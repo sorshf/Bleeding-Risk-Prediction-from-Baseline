@@ -1,9 +1,6 @@
 #No folders
 */
 
-#My experimental codes
-misceleanous.py
-
 #These are to run on the remote server
 *.yml
 *.sh

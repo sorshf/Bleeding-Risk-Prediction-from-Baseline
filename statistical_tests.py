@@ -352,11 +352,11 @@ def main():
 
             all_model_metrics = get_grid_search_results(grid_search_results_path)
 
-            omnibus_results = omnibus_test(all_model_metrics, metric_name, method="ANOVA")
+            omnibus_results = omnibus_test(all_model_metrics, metric_name, method="Friedman")
 
             effect_df = calc_effect_size(all_model_metrics, metric_name=metric_name, mode=mode)    
 
-            stat_df = calc_pairwise_p_value(all_model_metrics, metric_name=metric_name, method="Paired t-test", mode=mode)
+            stat_df = calc_pairwise_p_value(all_model_metrics, metric_name=metric_name, method="Wilcoxon signed-rank test", mode=mode)
 
             stat_df_corrected, multitest_used = correct_p_values(stat_df, multitest_correction="fdr_bh")
 

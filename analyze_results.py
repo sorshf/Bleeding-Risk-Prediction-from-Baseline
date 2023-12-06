@@ -31,9 +31,9 @@ from clinical_score import ClinicalScore
 from statistical_tests import correct_p_values, plot_p_value_heatmap
 
 model_dict = {
-    "All_models": ["Baseline_Dense", "FUP_RNN", "LastFUP_Dense", "Ensemble","FUP_Baseline_Multiinput", 'CHAP','ACCP','RIETE','VTE-BLEED','HAS-BLED','OBRI'],
+    "All_models": ["Baseline_Dense", "FUP_RNN", "LastFUP_Dense", "Ensemble", 'CHAP','ACCP','RIETE','VTE-BLEED','HAS-BLED','OBRI'],
     "Clinical_models": ['CHAP','ACCP','RIETE','VTE-BLEED','HAS-BLED','OBRI'],
-    "ML_models": ["Baseline_Dense", "LastFUP_Dense","FUP_RNN", "Ensemble","FUP_Baseline_Multiinput"]
+    "ML_models": ["Baseline_Dense", "LastFUP_Dense","FUP_RNN", "Ensemble",]
 }
 
 model_paper_dic = {
@@ -41,7 +41,7 @@ model_paper_dic = {
     "LastFUP_Dense":"LastFUP-ANN",
     "FUP_RNN":"FUP-RNN",
     "Ensemble":"Ensemble",
-    "FUP_Baseline_Multiinput":"Multimodal",
+    #"FUP_Baseline_Multiinput":"Multimodal", Multimodal has been eliminated
     'CHAP':"CHAP",
     'ACCP':'ACCP',
     'RIETE':'RIETE',
@@ -305,7 +305,7 @@ def plot_ROC_PR():
     for model_set in ['All_models']:
         model_names = model_dict[model_set]
         
-        fig, ax = plt.subplots(figsize=(6,5))
+        fig, ax = plt.subplots(figsize=(6/1.1,5/1.1))
 
 
         for model_name, color in zip(model_names, list(sns.color_palette("colorblind", len(model_names)))):
@@ -352,7 +352,7 @@ def plot_ROC_PR():
     for model_set in ['All_models']:
         model_names = model_dict[model_set]
 
-        fig, ax = plt.subplots(figsize=(6,5))
+        fig, ax = plt.subplots(figsize=(6/1.1,5/1.1))
 
         for model_name, color in zip(model_names, list(sns.color_palette("colorblind", len(model_names)))):
             detailed_test_res = pd.read_csv(f"./keras_tuner_results/{model_name}/{model_name}_detailed_test_results.csv")
@@ -704,7 +704,7 @@ def plot_FUP_count_density():
 
     ax1.legend()
 
-    ax1.set_xlabel("Number of Follow-ups", fontdict={"fontsize":12})
+    ax1.set_xlabel("Number of follow-ups", fontdict={"fontsize":12})
     ax1.set_ylabel("Count", fontdict={"fontsize":12})
 
     #########
@@ -718,7 +718,7 @@ def plot_FUP_count_density():
     ax2.set_xticks(range(follow_up_numbers))
     ax2.legend()
 
-    ax2.set_xlabel("Number of Follow-ups", fontdict={"fontsize":12})
+    ax2.set_xlabel("Number of follow-ups", fontdict={"fontsize":12})
     ax2.set_ylabel("Density", fontdict={"fontsize":12})
     
     
@@ -781,7 +781,7 @@ def plot_permutaion_feature_importance_RNN_FUP(number_of_permutations=100):
             new_timesteps = []
             for time in patient:
                 if np.sum(time) != SUM_PADDED_FUP:
-                    time[column_index] = np.random.choice(random_sampling_fups_dataset[:,column_index])
+                    time[column_index] = random_sampling_fups_dataset[np.random.choice(range(len(random_sampling_fups_dataset))) ,column_index]
                     new_timesteps.append(time)
                 else:
                     new_timesteps.append(time)
@@ -802,28 +802,51 @@ def plot_permutaion_feature_importance_RNN_FUP(number_of_permutations=100):
                 
     new_FUP_col_list = [turn_space_into_newline(col) for col in list_FUP_cols]
 
+    #Group the one-hot encoded features in the grouped_FUP_col_list.
+    grouped_FUP_col_list = dict()
+    counter = 0
 
-    # For each column in FUP test set
+    for col in new_FUP_col_list:
+        is_grouped_feature = False
+        for group_feat_name in ["Hypertension", "Diabetes Mellitus", "Myocardial Infarction", "Stroke", "Atrial fibrillation", "Post-thrombotic syndrome", "Recent Cancer diagnosis"]:
+            if ((group_feat_name in col) & (group_feat_name not in grouped_FUP_col_list)):
+                grouped_FUP_col_list[group_feat_name] = [counter]
+                is_grouped_feature = True
+                counter += 1
+            elif ((group_feat_name in col) & (group_feat_name in grouped_FUP_col_list)):
+                is_grouped_feature = True
+                grouped_FUP_col_list[group_feat_name].append(counter)
+                counter += 1
+        
+        if (not is_grouped_feature):
+            grouped_FUP_col_list[col] = [counter]          
+            counter += 1
+    
+    print(f"The total number of FUP features after grouping one hot encoded features is {len(grouped_FUP_col_list)}")
+            
+    # For each column in FUP test set (as defined by grouped_FUP_col_list)
     ## For number of permutation
     ### Copy the intact FUP test set
     ### permute the column for the FUP test set
     ### record the prc and auc
 
-    prc_permutation_results = {col:[] for col in new_FUP_col_list}
-    roc_permutation_results = {col:[] for col in new_FUP_col_list}
+    prc_permutation_results = {col:[] for col in grouped_FUP_col_list.keys()}
+    roc_permutation_results = {col:[] for col in grouped_FUP_col_list.keys()}
 
-    for col_name, col_indx in zip(new_FUP_col_list, range(len(new_FUP_col_list))):
+    for col_name in grouped_FUP_col_list.keys():
         for _ in range(number_of_permutations): #Number of permutations
             fup_test_copy = copy.deepcopy(norm_test_fups_X)
             
             #perturb column
-            purturbed_data = purturb_timeseries(fup_test_copy, column_index=col_indx)
+            purturbed_data = purturb_timeseries(fup_test_copy, column_index=grouped_FUP_col_list[col_name])
             
             test_res = model.evaluate(purturbed_data, test_y, verbose=0)
             result_dic = {metric:value for metric, value in zip(model.metrics_names,test_res)}
             
             prc_permutation_results[col_name].append(auprc-result_dic["prc"])
             roc_permutation_results[col_name].append(auroc-result_dic["auc"])
+            
+        print(col_name, "permutation is done.")
 
 
     color2 = sns.color_palette("colorblind", 15)
@@ -842,6 +865,7 @@ def plot_permutaion_feature_importance_RNN_FUP(number_of_permutations=100):
     sns.stripplot(data_plot, ax=ax1, orient='h', palette='dark:.15', marker=".", alpha=0.2)
     # ax1.set_yticklabels(ax1.get_yticklabels(),ha="center")
     ax1.set_ylabel("Predictor Variables", fontdict={"fontsize":15})
+    ax1.tick_params(axis='both', which='major', labelsize=15)
 
 
     data_plot = pd.DataFrame.from_dict({k: v for k, v in sorted(prc_permutation_results.items(), key=lambda item: np.mean(item[1]), reverse=True)})
@@ -860,7 +884,7 @@ def plot_permutaion_feature_importance_RNN_FUP(number_of_permutations=100):
 
     plt.tight_layout()
 
-    fig.savefig("./results_pics/feature_importance_RNN_FUP_10values.pdf")
+    fig.savefig("./results_pics/feature_importance_RNN_FUP_5values.pdf")
 
 
 
@@ -919,7 +943,7 @@ def mcnemar_analysis():
                             y_pred_dict["FUP-RNN"],
                             y_pred_dict["LastFUP-ANN"],
                             y_pred_dict["Ensemble"],
-                            y_pred_dict["Multimodal"],
+                            # y_pred_dict["Multimodal"], Removed multimodal
                             y_pred_dict["CHAP"],
                             y_pred_dict["ACCP"],
                             y_pred_dict["RIETE"],
@@ -942,13 +966,13 @@ def mcnemar_analysis():
     #Correct p-values for multiple hypothesis testing
     stat_test_results_corrected, multitest_correction = correct_p_values(stat_test_results, multitest_correction="fdr_bh")
     
-    #Plot the hitmap of p_values
+    #Plot the hitmap of the corrected p_values
     plot_p_value_heatmap(stat_test_results_corrected, effect_size_df=None, title="McNemar test",
                          save_path="./results_pics/", multitest_correction=multitest_correction, 
                      omnibus_p_value=f"Cochran q: {p_value_cochrane}", plot_name="McNemar")
             
 
-    #Plot the hitmap for the p-values
+    #Plot the hitmap for the uncorrected p-values
     fig, ax = plt.subplots(figsize=(9.5,6))
 
     cmap = (colors.ListedColormap(['#20e84f', '#abf5bc', '#f2d666'])
@@ -1187,31 +1211,31 @@ def get_clinical_scores_performance():
                
 def main():
     
-    #create_feature_sets_json()
+    create_feature_sets_json()
     
-    #get_clinical_scores_performance() #################
+    get_clinical_scores_performance()
     
-    # plot_iterated_k_fold_scores()
+    plot_iterated_k_fold_scores()
     
-    # plot_validations_train_test()
+    plot_validations_train_test()
     
-    # plot_ROC_PR()     ##################      
+    plot_ROC_PR()  
     
-    # plot_confusion_matrix()       ################# 
+    plot_confusion_matrix()
     
-    # extract_the_best_hps(number_of_best_hps=200)
+    extract_the_best_hps(number_of_best_hps=200)
     
-    # get_tn_fp_fn_tn()
+    get_tn_fp_fn_tn()
 
-    #save_deatiled_metrics_test()
+    save_deatiled_metrics_test()
     
-    # plot_FUP_count_density()    
+    plot_FUP_count_density()    
         
-    #plot_permutaion_feature_importance_RNN_FUP()    
+    plot_permutaion_feature_importance_RNN_FUP()    
     
     mcnemar_analysis()
     
-    # plot_FUP_RNN_probabilities_output()
+    plot_FUP_RNN_probabilities_output()
     
 if __name__=="__main__":
     main()
