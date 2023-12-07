@@ -2,7 +2,6 @@
 */
 
 #These are to run on the remote server
-*.yml
 *.sh
 *.zip
 
