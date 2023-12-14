@@ -861,7 +861,7 @@ def plot_permutaion_feature_importance_RNN_FUP(number_of_permutations=100):
     sns.boxplot(data_plot, ax=ax1, orient='h', color=color2[9], showfliers = False)
     # ax1.set_yticklabels(data_plot.columns, fontsize=8)
     ax1.vlines(0,-1,45, linestyles="--", color="grey", alpha=0.5)
-    ax1.set_xlabel("Change in AUROC", fontdict={"fontsize":15})
+    ax1.set_xlabel("Loss in AUROC", fontdict={"fontsize":15})
     sns.stripplot(data_plot, ax=ax1, orient='h', palette='dark:.15', marker=".", alpha=0.2)
     # ax1.set_yticklabels(ax1.get_yticklabels(),ha="center")
     ax1.set_ylabel("Predictor Variables", fontdict={"fontsize":15})
@@ -875,7 +875,7 @@ def plot_permutaion_feature_importance_RNN_FUP(number_of_permutations=100):
     sns.boxplot(data_plot, ax=ax2, orient='h',color=color2[9],showfliers = False)
     # ax2.set_yticklabels(data_plot.columns, fontsize=8)
     ax2.vlines(0,-1,45, linestyles="--", color="grey", alpha=0.5)
-    ax2.set_xlabel("Change in AUPRC", fontdict={"fontsize":15})
+    ax2.set_xlabel("Loss in AUPRC", fontdict={"fontsize":15})
     sns.stripplot(data_plot, ax=ax2, orient='h', palette='dark:.15', marker=".", alpha=0.2)
     # ax2.set_yticklabels(ax2.get_yticklabels(),ha="center")
 
@@ -896,7 +896,7 @@ def plot_permutaion_feature_importance_RNN_FUP(number_of_permutations=100):
     sns.boxplot(data_plot, ax=ax1, orient='h', color=color2[9], showfliers = False)
     # ax1.set_yticklabels(data_plot.columns, fontsize=8)
     ax1.vlines(0,-1,45, linestyles="--", color="grey", alpha=0.5)
-    ax1.set_xlabel("Change in AUROC", fontdict={"fontsize":16})
+    ax1.set_xlabel("Loss in AUROC", fontdict={"fontsize":16})
     sns.stripplot(data_plot, ax=ax1, orient='h', palette='dark:.15', marker=".", alpha=0.2)
     # ax1.set_yticklabels(ax1.get_yticklabels(),ha="center")
     ax1.set_ylabel("Predictor Variables", fontdict={"fontsize":16})
@@ -907,7 +907,7 @@ def plot_permutaion_feature_importance_RNN_FUP(number_of_permutations=100):
     sns.boxplot(data_plot, ax=ax2, orient='h',color=color2[9], showfliers = False)
     # ax2.set_yticklabels(data_plot.columns, fontsize=8)
     ax2.vlines(0,-1,45, linestyles="--", color="grey", alpha=0.5)
-    ax2.set_xlabel("Change in AUPRC", fontdict={"fontsize":15})
+    ax2.set_xlabel("Loss in AUPRC", fontdict={"fontsize":15})
     sns.stripplot(data_plot, ax=ax2, orient='h', palette='dark:.15', marker=".", alpha=0.2)
     # ax2.set_yticklabels(ax2.get_yticklabels(),ha="center")
 
@@ -917,7 +917,7 @@ def plot_permutaion_feature_importance_RNN_FUP(number_of_permutations=100):
     ax1.tick_params(axis='both', which='major', labelsize=10)
     ax2.tick_params(axis='both', which='major', labelsize=10)
 
-    fig.savefig("./results_pics/feature_importance_RNN_FUP.pdf")
+    fig.savefig("./results_pics/feature_importance_RNN_FUP_all_values.pdf")
  
  
  
