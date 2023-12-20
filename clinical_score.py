@@ -3,11 +3,7 @@
 # =============================================================================
 # Created By  : Soroush Shahryari Fard
 # =============================================================================
-"""The module to produce predictions by common Clinical Prediction Score.
-
-Usage:
-    python clinical_score.py
-
+"""The class to produce predictions by common Clinical Prediction Scores.
 """
 # =============================================================================
 # Imports
@@ -178,6 +174,17 @@ class ClinicalScore(BaseEstimator, ClassifierMixin):
         
     def predict_proba(self, X):
         if self.model_name == 'CHAP':
-            predictions_score = X.apply(lambda val: self.get_CHAP_Score(val), axis=1)
+            predictions_score = np.array([X.apply(lambda val: 1-self.get_CHAP_Score(val), axis=1), X.apply(lambda val: self.get_CHAP_Score(val), axis=1)]).T
+        elif self.model_name == 'ACCP':
+            predictions_score = np.array([X.apply(lambda val: 0, axis=1), X.apply(lambda val: self.get_ACCP_Score(val), axis=1)]).T
+        elif self.model_name == "RIETE":
+            predictions_score = np.array([X.apply(lambda val: 0, axis=1), X.apply(lambda val: self.get_RIETE_Score(val), axis=1)]).T
+        elif self.model_name == "VTE-BLEED":
+            predictions_score = np.array([X.apply(lambda val: 0, axis=1), X.apply(lambda val: self.get_VTE_BLEED_Score(val), axis=1)]).T
+        elif self.model_name == "HAS-BLED":
+            predictions_score = np.array([X.apply(lambda val: 0, axis=1), X.apply(lambda val: self.get_HAS_BLED_Score(val), axis=1)]).T
+        elif self.model_name == "OBRI":
+            predictions_score = np.array([X.apply(lambda val: 0, axis=1), X.apply(lambda val: self.get_OBRI_Score(val), axis=1)]).T
+            
             
         return predictions_score
