@@ -53,6 +53,10 @@ from sklearn.feature_selection import chi2
 from scipy.stats import ttest_ind
 from statsmodels.stats import multitest
 from sksurv.compare import compare_survival
+import json
+from sklearn.calibration import CalibratedClassifierCV
+import joblib
+
 
 all_models = {
     'CHAP':"Clinical",
@@ -559,6 +563,137 @@ def get_param_grid_model(classifier, joblib_memory_path = None):
     return pipe, param_grid
 
 
+def create_5_fold_cv_patient_ids():
+    """Saves the patient ids as 80% training-val, 10% calibration, 10% testing for 5 folds as JSON file in a stratified fashion.
+        This is done for reprodicibility accross multiple platforms.
+    """
+    #Get the formatted baseline dataset
+    _, _, _, concat_x, target_series = get_formatted_Baseline_FUP(mode="Formatted")
+
+    #Perform nested cross validation
+    #1 get outer cv indexes
+    from sklearn.model_selection import StratifiedKFold
+
+    inner_cv = StratifiedKFold(n_splits=2, shuffle=True, random_state=1)
+    outer_cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=1)
+
+    fold_id_dict = {f"Fold_{fold}":{"train_val":[], "test":[], "calibration":[]} for fold in [1,2,3,4,5]}
+
+    #Extract the train-val (80% or 5-fold split), and calibration_test (20%)
+    for i, (train_index, caliber_test_index) in enumerate(outer_cv.split(concat_x, target_series)):
+        
+        #Getting the patients ids for train_val
+        fold_id_dict[f"Fold_{i+1}"]["train_val"] = list(target_series.iloc[train_index].index)
+        
+        #Get ids for caliber and test
+        X_caliber_test = concat_x.iloc[caliber_test_index]
+        y_caliber_test = target_series.iloc[caliber_test_index]
+        
+        #Get the ids
+        for j, (caliber_index, test_index) in enumerate(inner_cv.split(X_caliber_test, y_caliber_test)):
+            
+            fold_id_dict[f"Fold_{i+1}"]["calibration"] = list(y_caliber_test.iloc[caliber_index].index)
+            fold_id_dict[f"Fold_{i+1}"]["test"] = list(y_caliber_test.iloc[test_index].index)
+
+    for fold in fold_id_dict:
+        
+        print(f"Fold {fold}") 
+        for data_section in ["train_val", "test", "calibration"]:
+            data_section_ids = fold_id_dict[fold][data_section]
+            x = concat_x.loc[data_section_ids]
+            y = target_series.loc[data_section_ids]
+            
+
+            print("\t",f" {data_section} bleeders:{sum(y)} non-bleeders:{len(y)-sum(y)}")
+            
+    with open('5_fold_cv_ids.json', 'w', encoding='utf-8') as f: 
+        json.dump(fold_id_dict, f, ensure_ascii=False, indent=4)
+        
+
+def perform_nested_cv_with_calibration(model, X, y, joblib_memory_path = None):
+    """Perform 5-fold nested CV by training and optimizing the ML models on the training-val fold, calibrating on the calibration fold, and then testing on the testing fold.
+    Note: Requires '5_fold_cv_ids.json' file with patient ids for 5 fold cv.
+
+    Args:
+        model (str): Name of the ML or clinical model.
+        X (pd.DataFrame): Tabular dataframe of all the baseline dataset.
+        y (pd.Series): Series of the targets for bleeders and non-bleeders.
+        joblib_memory_path (str, optional): If ML grid search should be stored for efficiency. Defaults to None.
+    """
+    #Get the dictionary with the cross-validation ids
+    with open('5_fold_cv_ids.json', 'r', encoding='utf-8') as f: 
+        fold_id_dict = json.load(f)
+    
+    
+    #Stratification object for hyperparameter optimization
+    inner_cv = StratifiedKFold(n_splits=3, shuffle=True, random_state=1)
+
+    print(f'Started performing nested cv for {model}')
+            
+    for fold_num in fold_id_dict:
+        
+        start_time = time.time()
+        
+        #Copy the input X and the output y  
+        baseline_dataframe_duplicate = X.copy()
+        target_series_duplicate = y.copy()
+        
+        train_val_ids = fold_id_dict[fold_num]["train_val"]
+        test_ids = fold_id_dict[fold_num]["test"]
+        calibration_ids = fold_id_dict[fold_num]["calibration"]
+        
+        #Perform hyperparameter optimization followed by data training on the training_val dataset
+        x_training_val = baseline_dataframe_duplicate.loc[train_val_ids]
+        y_training_val = target_series_duplicate.loc[train_val_ids]
+        
+        
+        if all_models[model] == "ML":
+            #Get the parameter grid
+            pipe, param_grid = get_param_grid_model(model, joblib_memory_path)
+            
+            clf = GridSearchCV(estimator=pipe, param_grid=param_grid, cv=inner_cv, scoring="roc_auc", n_jobs=-1, refit=True)
+            #clf = RandomizedSearchCV(estimator=pipe, n_iter=10, param_distributions=param_grid, cv=inner_cv, scoring="roc_auc",n_jobs=-1, refit=True)
+            
+            #Fit the model and do hyperparmeter optimization
+            clf.fit(x_training_val, y_training_val)
+        
+        elif all_models[model] == "Clinical":
+            #Create the score object
+            clf = ClinicalScore(model)
+
+            #Fitting doesn't do anything special, it is just required for the class
+            clf = clf.fit(x_training_val, y_training_val)
+        
+    
+        #Calibrate the fitted model
+        x_calibration = baseline_dataframe_duplicate.loc[calibration_ids]
+        y_calibration = target_series_duplicate.loc[calibration_ids]
+        
+        calibrated_clf = CalibratedClassifierCV(clf, cv="prefit")
+        calibrated_clf.fit(x_calibration, y_calibration)
+        
+        
+        #Test the calibrated, fitted model
+        x_test = baseline_dataframe_duplicate.loc[test_ids]
+        y_test = target_series_duplicate.loc[test_ids]
+        #save the calibrated and uncalibrated models
+        joblib.dump(clf, f"./calibrated_models/{model}_{fold_num}_NOT_calibrated.pkl")
+        joblib.dump(clf, f"./calibrated_models/{model}_{fold_num}_calibrated.pkl")
+        #Test results
+        test_results = {
+            "uniqid": list(x_test.index),
+            "y_actual": list(y_test),
+            "y_pred_NOT_calibrated": list(clf.predict_proba(x_test)[:, 1]),
+            "y_pred_calibrated": list(calibrated_clf.predict_proba(x_test)[:, 1])
+        }
+        #Save the detailed test results
+        with open(f'./calibrated_models/{model}_{fold_num}_detailed_test_results.json', 'w', encoding='utf-8') as f: 
+            json.dump(test_results, f, ensure_ascii=False, indent=4, default=int)
+        
+        
+        print("\t", model, fold_num, "is done in", f'{time.time()-start_time}', "seconds.")    
+
+
 def perform_nested_cv(model, X, y, joblib_memory_path = None):
     
     #Custom Scores
@@ -661,10 +796,10 @@ def main(mode, joblib_memory_path=None):
     def nested_cv_(model_name):
         if all_models[model_name] == "Clinical":
             _, _, _, concat_x, target_series = get_formatted_Baseline_FUP(mode="Raw")
-            perform_nested_cv(model_name, concat_x, target_series, joblib_memory_path)
+            perform_nested_cv_with_calibration(model_name, concat_x, target_series, joblib_memory_path)
         elif all_models[model_name] == "ML":
             _, _, _, concat_x, target_series = get_formatted_Baseline_FUP(mode="Formatted")
-            perform_nested_cv(model_name, concat_x, target_series, joblib_memory_path)
+            perform_nested_cv_with_calibration(model_name, concat_x, target_series, joblib_memory_path)
     
     
     #Perform nested cv
