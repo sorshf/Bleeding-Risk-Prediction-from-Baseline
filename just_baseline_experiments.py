@@ -427,7 +427,7 @@ def get_param_grid_model(classifier, joblib_memory_path = None):
 
             ]
         
-        model = SVC(random_state=1)
+        model = SVC(random_state=1, probability=True)
         
         
     elif classifier == "RandomForest":
