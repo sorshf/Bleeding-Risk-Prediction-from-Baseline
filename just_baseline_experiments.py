@@ -21,7 +21,7 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier, GradientBoostingClassifier, ExtraTreesClassifier
 from sklearn.svm import SVC, LinearSVC
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import confusion_matrix, make_scorer, accuracy_score, precision_score, average_precision_score, roc_auc_score, recall_score, f1_score
+from sklearn.metrics import confusion_matrix, make_scorer, accuracy_score, precision_score, average_precision_score, roc_auc_score, recall_score, f1_score, brier_score_loss
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from sklearn.decomposition import PCA, KernelPCA
 from sklearn.model_selection import StratifiedKFold, GridSearchCV, RandomizedSearchCV, StratifiedKFold, cross_validate, RepeatedStratifiedKFold
@@ -56,6 +56,7 @@ from sksurv.compare import compare_survival
 import json
 from sklearn.calibration import CalibratedClassifierCV
 import joblib
+from statistical_tests import *
 
 
 all_models = {
@@ -173,41 +174,24 @@ def generate_metric_pictures():
         ax.set_xlabel("", fontsize=14)
         ax.set_ylabel(f"{metric_name}", fontsize=15)
         
-        xlabel_to_type_dic = {v:all_models[k] for k,v in nice_names.items()}
+        xlabel_to_type_dic = {v:all_models[k] for k,v in nice_names.items() if k in all_models}
         
         for i, model in enumerate(ordered_xlabels):
             if xlabel_to_type_dic[model]=="ML":
                 plt.setp(ax.get_xticklabels()[i], color='red')
 
         
-        fig.savefig(f"./sklearn_results/Figures/{metric_name}.pdf", bbox_inches="tight")
-        fig.savefig(f"./sklearn_results/Figures/{metric_name}.png", dpi=500, bbox_inches="tight")
+        fig.savefig(f"./calibrated_models/figures/{metric_name}.pdf", bbox_inches="tight")
+        fig.savefig(f"./calibrated_models/figures/{metric_name}.png", dpi=500, bbox_inches="tight")
 
     #Populate the metrics data into a dic
     all_model_metrics = dict()
 
     #The metrics of interests
-    metrics = ["AUPRC", "AUROC"]
+    metrics = ["AUPRC", "AUROC", "Brier Loss"]
 
-    #Populate the dic
-    for model in all_models:
-        if all_models[model] == "ML":
-
-            model_metrics = dict()
-
-            with open(f"./sklearn_results/{model}_nested_cv_results.pickle", 'rb') as handle:
-                data = pickle.load(handle)
-
-            for metric in metrics:
-                model_metrics[metric] = list(data[f"test_{metric}"])
-                
-            all_model_metrics[model] = model_metrics
-                
-        elif all_models[model] == "Clinical":
-            
-            data = pd.read_csv(f"./sklearn_results/{model}_nested_cv_results.csv").drop("Unnamed: 0", axis=1).to_dict(orient='list')
-
-            all_model_metrics[model] = data
+    #Calculate and save the AUROC, AUPRC, and Brier score from the saved JSON files.
+    all_model_metrics = get_CV_results_from_json(saving_path="./calibrated_models/")
         
     #Reformat the data into df   
     df_all = pd.DataFrame()
@@ -233,16 +217,14 @@ def generate_metric_pictures():
     #Draw the best feature selection method
     feature_selection_counter = dict()
 
-    for model in [model for model in all_models if all_models[model]=="ML" if model != "Dummy"]:
-        with open(f"./sklearn_results/{model}_nested_cv_results.pickle", 'rb') as handle:
-            nested_score = pickle.load(handle)
+    for model_name in [model for model in all_models if all_models[model]=="ML" if model != "Dummy"]:
             
-        model = nice_names[model]
+        model = nice_names[model_name]
         
         feature_selection_counter[model] = {"PCA-5":0,"PCA-10":0, "SFS-5":0,"SFS-10":0, "None":0}
         
-        for i in range(len(nested_score['estimator'])):
-            est1 = nested_score['estimator'][i]
+        for fold in [f"Fold_{i}" for i in range(1, 6)]:
+            est1 = joblib.load(f'./calibrated_models/{model_name}_{fold}_calibrated.pkl')
             feature_selection_method = est1.best_estimator_.steps[1][1]
             reduce_dim_method = est1.best_estimator_.steps[2][1]
         
@@ -277,10 +259,39 @@ def generate_metric_pictures():
     ax.xaxis.set_tick_params(labelsize=9, rotation=0)
     ax.yaxis.set_tick_params(labelsize=9)
 
-    fig.savefig(f"./sklearn_results/Figures/best_selection_methods.pdf", bbox_inches="tight")
-    fig.savefig(f"./sklearn_results/Figures/best_selection_methods.png", dpi=300, bbox_inches="tight")
+    fig.savefig(f"./calibrated_models/figures/best_selection_methods.pdf", bbox_inches="tight")
+    fig.savefig(f"./calibrated_models/figures/best_selection_methods.png", dpi=300, bbox_inches="tight")
             
 
+def perform_statistical_tests():
+    """Perform pairwise Wilcoxon sign-rank test and show their results as a heatmap
+    """
+    metric_names = ["AUPRC", "AUROC", "Brier Loss"]
+    modes = ["all_pairs","ML vs Clinical"]
+
+    grid_search_results_path = "./calibrated_models/"
+    stat_figure_save_path = "./calibrated_models/figures/"
+
+    for mode in modes:
+        for metric_name in metric_names:
+
+            all_model_metrics = get_CV_results_from_json(grid_search_results_path)
+
+            omnibus_results = omnibus_test(all_model_metrics, metric_name, method="Friedman")
+
+            effect_df = calc_effect_size(all_models, all_model_metrics, metric_name=metric_name, mode=mode)    
+
+            stat_df = calc_pairwise_p_value(all_models, all_model_metrics, metric_name=metric_name, method="Wilcoxon signed-rank test", mode=mode)
+
+            stat_df_corrected, multitest_used = correct_p_values(stat_df, multitest_correction="fdr_bh")
+
+            plot_p_value_heatmap(stat_df_corrected, effect_size_df=effect_df, title=metric_name, 
+                                save_path = stat_figure_save_path,
+                                multitest_correction = multitest_used,
+                                plot_name=f"{metric_name}_{mode}_", 
+                                omnibus_p_value=f"{omnibus_results}", 
+                                p_value_threshold=0.05)
+            
 
 def get_param_grid_model(classifier, joblib_memory_path = None):
     
@@ -1290,6 +1301,44 @@ def perform_unsupervised_learning():
     ########################
     
     
+def get_CV_results_from_json(saving_path):
+    """Read the JSON summary files of 5-fold nested CV stored in saving_path, then calculates AUROC, AUPRC, and Brier Loss for each fold of CV.
+
+    Args:
+        saving_path (str): Path to the folder containing the json files.
+
+    Returns:
+        dict: A dictionary where keys are model names and values are the metrics measured for 5-fold cv.
+    """
+    #Populate the metrics data into a dic
+    all_model_metrics = dict()
+
+    #Populate the dic
+    for model_name in all_models.keys():
+
+        algorithm_metric_dicts = {"AUROC":[], "AUPRC":[], "Brier Loss":[]}
+        
+        for fold in [f"Fold_{i}" for i in range(1, 6)]:
+            
+            with open(f'{saving_path}/{model_name}_{fold}_detailed_test_results.json', 'r', encoding='utf-8') as f: 
+                fold_id_dict = json.load(f)
+            
+            y_actual = fold_id_dict["y_actual"]
+            y_pred_calibrated = fold_id_dict["y_pred_calibrated"]
+            
+            
+            auroc = roc_auc_score(y_actual, y_pred_calibrated)
+            auprc = average_precision_score(y_actual, y_pred_calibrated)
+            brier = brier_score_loss(y_actual, y_pred_calibrated)
+            
+            algorithm_metric_dicts["AUROC"].append(auroc)
+            algorithm_metric_dicts["AUPRC"].append(auprc)
+            algorithm_metric_dicts["Brier Loss"].append(brier)
+        
+        
+        all_model_metrics[model_name] = algorithm_metric_dicts
+        
+    return all_model_metrics
     
 if __name__=="__main__":
     """
@@ -1313,5 +1362,8 @@ if __name__=="__main__":
         generate_metric_pictures()
     elif sys.argv[1] == 'unsupervised':
         perform_unsupervised_learning()
+    elif sys.argv[1] == 'statistical_tests':
+        perform_statistical_tests()
+
 
 

@@ -16,17 +16,17 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from scipy.stats import friedmanchisquare, wilcoxon, ttest_rel
-from just_baseline_experiments import all_models
 import pickle
 import matplotlib.ticker as ticker
 
 
 
-def get_grid_search_results(folder_name):
+def get_cv_results_from_nested_cv(folder_name, all_models):
     """Parse grid search results.
 
     Args:
         folder_name (str): The folder in this directory containing the grid search results
+        all_models (dict): The dictionary of all the models names and their type (ie. "ML", "Clinical").
 
     Returns:
         dic: A dictionary of where keys are models and values are the metrics measured after grid search.
@@ -133,10 +133,11 @@ def test_omnibus_test_fxn():
     omnibus_test(my_dic, metric_name="test", method="Friedman", alpha=0.05)
     print("Friedman results should be pvalue=0.005063414171757498")
     
-def calc_effect_size(all_metrics_dic, metric_name, mode):
+def calc_effect_size(all_models, all_metrics_dic, metric_name, mode):
     """Calculates the effect size (Hedges g test) of the models performance.
 
     Args:
+        all_models (dict): The dictionary of all the models names and their type (ie. "ML", "Clinical").
         all_metrics_dic (dict): A dictionary of where keys are models and values are the metrics measured after grid search.
         metric_name (str): The metric that is being tested from the dict data.
         mode (str): "all_pairs": comapres all pairwise combinations; or "ML vs Clinical":compared ML models with Clinical
@@ -165,10 +166,11 @@ def calc_effect_size(all_metrics_dic, metric_name, mode):
                 
     return eff_size_results
 
-def calc_pairwise_p_value(all_metrics_dic, metric_name, method, mode):
+def calc_pairwise_p_value(all_models, all_metrics_dic, metric_name, method, mode):
     """Calculates the pairwise wilcoxon sign-rank or paired t-test on the performances of the models.
 
     Args:
+        all_models (dict): The dictionary of all the models names and their type (ie. "ML", "Clinical").
         all_metrics_dic (dict): A dictionary of where keys are models and values are the metrics measured after grid search.
         metric_name (str): The metric that is being tested from the dict data.
         method (str): Either "Wilcoxon signed-rank test" or "Paired t-test".
@@ -339,35 +341,3 @@ def plot_p_value_heatmap(p_value_df, effect_size_df, title, save_path, multitest
     
     fig.savefig(f"{save_path}{plot_name}_{multitest_correction}.pdf", bbox_inches='tight')
     
-    
-def main():
-    metric_names = ["AUPRC", "AUROC"]
-    modes = ["all_pairs","ML vs Clinical"]
-    
-    grid_search_results_path = "./sklearn_results/"
-    stat_figure_save_path = "./sklearn_results/Figures/"
-
-    for mode in modes:
-        for metric_name in metric_names:
-
-            all_model_metrics = get_grid_search_results(grid_search_results_path)
-
-            omnibus_results = omnibus_test(all_model_metrics, metric_name, method="Friedman")
-
-            effect_df = calc_effect_size(all_model_metrics, metric_name=metric_name, mode=mode)    
-
-            stat_df = calc_pairwise_p_value(all_model_metrics, metric_name=metric_name, method="Wilcoxon signed-rank test", mode=mode)
-
-            stat_df_corrected, multitest_used = correct_p_values(stat_df, multitest_correction="fdr_bh")
-
-            plot_p_value_heatmap(stat_df_corrected, effect_size_df=effect_df, title=metric_name, 
-                                 save_path = stat_figure_save_path,
-                                 multitest_correction = multitest_used,
-                                 plot_name=f"{metric_name}_{mode}_", 
-                                 omnibus_p_value=f"{omnibus_results}", 
-                                 p_value_threshold=0.05)
-            
-            
-            
-if __name__ == "__main__":
-    main()
