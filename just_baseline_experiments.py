@@ -181,8 +181,8 @@ def generate_metric_pictures():
                 plt.setp(ax.get_xticklabels()[i], color='red')
 
         
-        fig.savefig(f"./calibrated_models/figures/{metric_name}.pdf", bbox_inches="tight")
-        fig.savefig(f"./calibrated_models/figures/{metric_name}.png", dpi=500, bbox_inches="tight")
+        fig.savefig(f"./sklearn_models/figures/{metric_name}.pdf", bbox_inches="tight")
+        fig.savefig(f"./sklearn_models/figures/{metric_name}.png", dpi=500, bbox_inches="tight")
 
     #Populate the metrics data into a dic
     all_model_metrics = dict()
@@ -191,7 +191,7 @@ def generate_metric_pictures():
     metrics = ["AUPRC", "AUROC", "Brier Loss"]
 
     #Calculate and save the AUROC, AUPRC, and Brier score from the saved JSON files.
-    all_model_metrics = get_CV_results_from_json(saving_path="./calibrated_models/")
+    all_model_metrics = get_CV_results_from_json(saving_path="./sklearn_models/test_results/")
         
     #Reformat the data into df   
     df_all = pd.DataFrame()
@@ -224,7 +224,7 @@ def generate_metric_pictures():
         feature_selection_counter[model] = {"PCA-5":0,"PCA-10":0, "SFS-5":0,"SFS-10":0, "None":0}
         
         for fold in [f"Fold_{i}" for i in range(1, 6)]:
-            est1 = joblib.load(f'./calibrated_models/{model_name}_{fold}_calibrated.pkl')
+            est1 = joblib.load(f'./sklearn_models/calibrated_models/{model_name}_{fold}_calibrated.pkl')
             feature_selection_method = est1.best_estimator_.steps[1][1]
             reduce_dim_method = est1.best_estimator_.steps[2][1]
         
@@ -259,8 +259,8 @@ def generate_metric_pictures():
     ax.xaxis.set_tick_params(labelsize=9, rotation=0)
     ax.yaxis.set_tick_params(labelsize=9)
 
-    fig.savefig(f"./calibrated_models/figures/best_selection_methods.pdf", bbox_inches="tight")
-    fig.savefig(f"./calibrated_models/figures/best_selection_methods.png", dpi=300, bbox_inches="tight")
+    fig.savefig(f"./sklearn_models/figures/best_selection_methods.pdf", bbox_inches="tight")
+    fig.savefig(f"./sklearn_models/figures/best_selection_methods.png", dpi=300, bbox_inches="tight")
             
 
 def perform_statistical_tests():
@@ -269,8 +269,8 @@ def perform_statistical_tests():
     metric_names = ["AUPRC", "AUROC", "Brier Loss"]
     modes = ["all_pairs","ML vs Clinical"]
 
-    grid_search_results_path = "./calibrated_models/"
-    stat_figure_save_path = "./calibrated_models/figures/"
+    grid_search_results_path = "./sklearn_models/test_results/"
+    stat_figure_save_path = "./sklearn_models/figures/"
 
     for mode in modes:
         for metric_name in metric_names:
@@ -688,8 +688,8 @@ def perform_nested_cv_with_calibration(model, X, y, joblib_memory_path = None):
         x_test = baseline_dataframe_duplicate.loc[test_ids]
         y_test = target_series_duplicate.loc[test_ids]
         #save the calibrated and uncalibrated models
-        joblib.dump(clf, f"./calibrated_models/{model}_{fold_num}_NOT_calibrated.pkl")
-        joblib.dump(clf, f"./calibrated_models/{model}_{fold_num}_calibrated.pkl")
+        joblib.dump(clf, f"./sklearn_models/uncalibrated_models/{model}_{fold_num}_NOT_calibrated.pkl")
+        joblib.dump(clf, f"./sklearn_models/calibrated_models/{model}_{fold_num}_calibrated.pkl")
         #Test results
         test_results = {
             "uniqid": list(x_test.index),
@@ -698,7 +698,7 @@ def perform_nested_cv_with_calibration(model, X, y, joblib_memory_path = None):
             "y_pred_calibrated": list(calibrated_clf.predict_proba(x_test)[:, 1])
         }
         #Save the detailed test results
-        with open(f'./calibrated_models/{model}_{fold_num}_detailed_test_results.json', 'w', encoding='utf-8') as f: 
+        with open(f'./sklearn_models/test_results/{model}_{fold_num}_detailed_test_results.json', 'w', encoding='utf-8') as f: 
             json.dump(test_results, f, ensure_ascii=False, indent=4, default=int)
         
         
