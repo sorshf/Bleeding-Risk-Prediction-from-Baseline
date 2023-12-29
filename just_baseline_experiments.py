@@ -827,6 +827,69 @@ def main(mode, joblib_memory_path=None):
         raise Exception(f"The mode {mode} doesn't exist.")
     
 
+def Brier_score(y_true, y_pred, nbins):
+    """Calculate Brier Score and its decomposition (uncertainty, resolution, reliability, Brier_score, Brier_skill_score).
+
+    Args:
+        y_true (np.array): Array of true labels (0 or 1).
+        y_pred (np.array): Array of predictions probabilities.
+        nbins (int): Number of bins to bin the probabilities
+        
+    Return:
+        (int, int, int, int, int): uncertainty, resolution, reliability, Brier_score, Brier_skill_score
+    """
+
+    def base_rate(y, element):
+        return sum(np.where(y==element, 1, 0))/len(y)
+    
+
+    p_1 = base_rate(y_true, 1)
+    
+    uncertainty = p_1 * (1-p_1)
+    
+    
+    ########
+    #Resolution
+    #List with measn square difference of bin probability and overall base rate
+    msd_bin_overall = []
+    
+    binned_df = pd.DataFrame(np.array([y_pred, 
+                                        y_true, 
+                       np.digitize(y_pred, bins=np.histogram(y_pred, nbins)[1])]).T, 
+             columns=["y_pred", "y_actual", "bin"])
+    
+    for bin in binned_df["bin"].unique():
+        y = binned_df.loc[binned_df["bin"]==bin, "y_actual"]
+        msd_bin_overall.append(((base_rate(y, 1)-p_1)**2 ) * len(y))
+        
+    resolution = sum(msd_bin_overall)/len(y_pred)
+    
+    
+    #############
+    #Reliability
+    #List with measn square difference of bin probability and bin base rate
+    msd_bin_base = []
+    
+    for bin in binned_df["bin"].unique():
+        y = binned_df.loc[binned_df["bin"]==bin, "y_actual"]
+        y_prob = binned_df.loc[binned_df["bin"]==bin, "y_pred"]
+        msd_bin_base.append(((np.average(y_prob) - base_rate(y, 1))**2 ) * len(y))
+    
+    reliability = sum(msd_bin_base)/len(y_pred)
+    
+    
+    #####
+    #Brier Score
+    Brier_score = np.average((y_pred-y_true)**2)
+    
+    
+    #####
+    Brier_skill_score = (resolution-reliability)/uncertainty
+    
+    
+    return uncertainty, resolution, reliability, Brier_score, Brier_skill_score
+    
+    
 def perform_unsupervised_learning():
     
     #Get the Baseline dataset formatted
