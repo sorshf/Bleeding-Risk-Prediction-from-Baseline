@@ -266,8 +266,8 @@ def generate_metric_pictures():
 def perform_statistical_tests():
     """Perform pairwise Wilcoxon sign-rank test and show their results as a heatmap
     """
-    metric_names = ["AUPRC", "AUROC", "Brier Loss"]
-    modes = ["all_pairs","ML vs Clinical"]
+    metric_names = ["AUPRC", "AUROC", "Brier Loss", "Uncertainty", "Resolution", "Reliability", "Brier Skill Score"]
+    modes = ["all_pairs"]
 
     grid_search_results_path = "./sklearn_models/test_results/"
     stat_figure_save_path = "./sklearn_models/figures/"
@@ -1365,7 +1365,7 @@ def perform_unsupervised_learning():
     
     
 def get_CV_results_from_json(saving_path):
-    """Read the JSON summary files of 5-fold nested CV stored in saving_path, then calculates AUROC, AUPRC, and Brier Loss for each fold of CV.
+    """Read the JSON summary files of 5-fold nested CV stored in saving_path, then calculates AUROC, AUPRC, and Brier Loss (and its decomposition components) for each fold of CV.
 
     Args:
         saving_path (str): Path to the folder containing the json files.
@@ -1379,7 +1379,7 @@ def get_CV_results_from_json(saving_path):
     #Populate the dic
     for model_name in all_models.keys():
 
-        algorithm_metric_dicts = {"AUROC":[], "AUPRC":[], "Brier Loss":[]}
+        algorithm_metric_dicts = {"AUROC":[], "AUPRC":[], "Brier Loss":[], "Uncertainty":[], "Resolution":[], "Reliability":[], "Brier Skill Score":[]}
         
         for fold in [f"Fold_{i}" for i in range(1, 6)]:
             
@@ -1393,15 +1393,35 @@ def get_CV_results_from_json(saving_path):
             auroc = roc_auc_score(y_actual, y_pred_calibrated)
             auprc = average_precision_score(y_actual, y_pred_calibrated)
             brier = brier_score_loss(y_actual, y_pred_calibrated)
+            uncertainty, resolution, reliability, _, Brier_skill_score = Brier_score(np.array(y_actual), np.array(y_pred_calibrated), nbins=10)
             
             algorithm_metric_dicts["AUROC"].append(auroc)
             algorithm_metric_dicts["AUPRC"].append(auprc)
             algorithm_metric_dicts["Brier Loss"].append(brier)
+            algorithm_metric_dicts["Brier Skill Score"].append(Brier_skill_score)
+            algorithm_metric_dicts["Reliability"].append(reliability)
+            algorithm_metric_dicts["Resolution"].append(resolution)
+            algorithm_metric_dicts["Uncertainty"].append(uncertainty)
         
         
         all_model_metrics[model_name] = algorithm_metric_dicts
         
     return all_model_metrics
+
+def create_CV_result_table():
+    
+    cv_results = get_CV_results_from_json("./sklearn_models/test_results/")
+
+    table = pd.DataFrame(columns=cv_results["CHAP"].keys() , index=cv_results.keys())
+    
+    for model in cv_results.keys():
+        for metric in cv_results[model].keys():
+            metric_mean = np.average(cv_results[model][metric])
+            metric_std = np.std(cv_results[model][metric])
+            
+            table.loc[model, metric] = f"{metric_mean:.2e} ({metric_std:.2e})"
+            
+    table.to_excel("./sklearn_models/test_results/Summary_table.xlsx")
     
 if __name__=="__main__":
     """
@@ -1426,6 +1446,7 @@ if __name__=="__main__":
     elif sys.argv[1] == 'unsupervised':
         perform_unsupervised_learning()
     elif sys.argv[1] == 'statistical_tests':
+        create_CV_result_table()
         perform_statistical_tests()
 
 
