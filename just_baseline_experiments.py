@@ -20,7 +20,7 @@ from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier, GradientBoostingClassifier, ExtraTreesClassifier
 from sklearn.svm import SVC, LinearSVC
-from sklearn.linear_model import LogisticRegression
+from sklearn.linear_model import LogisticRegression, LinearRegression
 from sklearn.metrics import confusion_matrix, make_scorer, accuracy_score, precision_score, average_precision_score, roc_auc_score, recall_score, f1_score, brier_score_loss
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from sklearn.decomposition import PCA, KernelPCA
@@ -1379,7 +1379,9 @@ def get_CV_results_from_json(saving_path):
     #Populate the dic
     for model_name in all_models.keys():
 
-        algorithm_metric_dicts = {"AUROC":[], "AUPRC":[], "Brier Loss":[], "Uncertainty":[], "Resolution":[], "Reliability":[], "Brier Skill Score":[]}
+        algorithm_metric_dicts = {"AUROC":[], "AUPRC":[], "Brier Loss":[], 
+                                  "Uncertainty":[], "Resolution":[], "Reliability":[], 
+                                  "Brier Skill Score":[], "Slope":[], "Intercept":[]}
         
         for fold in [f"Fold_{i}" for i in range(1, 6)]:
             
@@ -1389,6 +1391,10 @@ def get_CV_results_from_json(saving_path):
             y_actual = fold_id_dict["y_actual"]
             y_pred_calibrated = fold_id_dict["y_pred_calibrated"]
             
+            ##Cox regression 
+            regr = LinearRegression()
+            regr.fit(np.array(y_pred_calibrated).reshape(-1, 1), y_actual)
+            slope, intercept = regr.coef_[0], regr.intercept_
             
             auroc = roc_auc_score(y_actual, y_pred_calibrated)
             auprc = average_precision_score(y_actual, y_pred_calibrated)
@@ -1402,6 +1408,8 @@ def get_CV_results_from_json(saving_path):
             algorithm_metric_dicts["Reliability"].append(reliability)
             algorithm_metric_dicts["Resolution"].append(resolution)
             algorithm_metric_dicts["Uncertainty"].append(uncertainty)
+            algorithm_metric_dicts["Slope"].append(slope)
+            algorithm_metric_dicts["Intercept"].append(intercept)
         
         
         all_model_metrics[model_name] = algorithm_metric_dicts
