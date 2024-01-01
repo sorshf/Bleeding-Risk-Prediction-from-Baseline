@@ -266,7 +266,7 @@ def generate_metric_pictures():
 def perform_statistical_tests():
     """Perform pairwise Wilcoxon sign-rank test and show their results as a heatmap
     """
-    metric_names = ["AUPRC", "AUROC", "Brier Loss", "Uncertainty", "Resolution", "Reliability", "Brier Skill Score"]
+    metric_names = ["AUPRC", "AUROC", "Brier Loss", "Uncertainty", "Resolution", "Reliability", "Brier Skill Score", "Slope", "Intercept"]
     modes = ["all_pairs"]
 
     grid_search_results_path = "./sklearn_models/test_results/"
