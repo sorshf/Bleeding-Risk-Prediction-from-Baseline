@@ -1,5 +1,10 @@
 #No folders
-*/
+Chantal_bleeding_revisions
+Raw Data
+/sklearn_models/*
+!/sklearn_models/calibrated_models/
+!/sklearn_models/uncalibrated_models/
+
 
 #These are to run on the remote server
 *.sh
@@ -138,6 +143,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+.vscode
 
 # Spyder project settings
 .spyderproject

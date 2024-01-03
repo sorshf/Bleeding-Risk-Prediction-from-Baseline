@@ -188,7 +188,7 @@ def generate_metric_pictures():
     all_model_metrics = dict()
 
     #The metrics of interests
-    metrics = ["AUPRC", "AUROC", "Brier Loss"]
+    metrics = ["AUPRC", "AUROC", "Brier Loss", "Uncertainty", "Resolution", "Reliability", "Brier Skill Score", "Slope", "Intercept"]
 
     #Calculate and save the AUROC, AUPRC, and Brier score from the saved JSON files.
     all_model_metrics = get_CV_results_from_json(saving_path="./sklearn_models/test_results/")
