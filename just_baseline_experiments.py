@@ -1025,6 +1025,21 @@ def perform_unsupervised_learning():
     fig.savefig(f"./sklearn_results/Figures/PCA_Explained_varience_all_new.pdf",  bbox_inches='tight')  
     fig.savefig(f"./sklearn_results/Figures/PCA_Explained_varience_all_new.png", dpi=500, bbox_inches='tight')  
 
+    #################################################
+    #Create the table of most important features for the first 10 PCs of PCA
+
+    #Perform PCA
+    pca = PCA(n_components=10)
+    X_PCA = pca.fit_transform(concat_scaled_df)
+
+    #Get the most and least important features from PCA loadings
+    most_important = list(concat_scaled_df.columns[np.argmax(abs( pca.components_ ), axis=1)])
+    least_important = list(concat_scaled_df.columns[np.argmin(abs( pca.components_ ), axis=1)])
+
+    pca_loading_df = pd.DataFrame(np.array([most_important, least_important]).T, index=[f"PC{val}" for val in range(1, 11)], 
+                columns=["Most Important Features", "Least Important Features"])
+
+    pca_loading_df.to_excel("./sklearn_results/Figures/important_features_PCA_10PCs_.xlsx")
     
     #################################################
     #Create the graph of three dimentionality reduction
