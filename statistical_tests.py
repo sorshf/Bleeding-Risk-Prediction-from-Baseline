@@ -323,7 +323,7 @@ def plot_p_value_heatmap(p_value_df, effect_size_df, title, save_path, multitest
     if effect_size_df is not None:
         fontsize=6
     else:
-        fontsize=8.5
+        fontsize=6.7
         
     sns.heatmap(p_value_df.astype(float),annot=labels, cmap=cmap, norm=norm,fmt="", annot_kws={"fontsize":fontsize}, 
                 square=False,linewidths=.7, ax=ax, cbar=True, cbar_kws={'label':"$\it{p}$-value", "shrink": 0.75},

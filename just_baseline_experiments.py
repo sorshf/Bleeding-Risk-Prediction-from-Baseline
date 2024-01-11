@@ -279,13 +279,13 @@ def perform_statistical_tests():
 
             omnibus_results = omnibus_test(all_model_metrics, metric_name, method="Friedman")
 
-            effect_df = calc_effect_size(all_models, all_model_metrics, metric_name=metric_name, mode=mode)    
+            #effect_df = calc_effect_size(all_models, all_model_metrics, metric_name=metric_name, mode=mode)    
 
             stat_df = calc_pairwise_p_value(all_models, all_model_metrics, metric_name=metric_name, method="Wilcoxon signed-rank test", mode=mode)
 
             stat_df_corrected, multitest_used = correct_p_values(stat_df, multitest_correction="fdr_bh")
 
-            plot_p_value_heatmap(stat_df_corrected, effect_size_df=effect_df, title=metric_name, 
+            plot_p_value_heatmap(stat_df_corrected, effect_size_df=None, title=metric_name, 
                                 save_path = stat_figure_save_path,
                                 multitest_correction = multitest_used,
                                 plot_name=f"{metric_name}_{mode}_", 
