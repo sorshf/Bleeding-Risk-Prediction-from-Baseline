@@ -4,6 +4,7 @@ Raw Data
 /sklearn_models/*
 !/sklearn_models/calibrated_models/
 !/sklearn_models/uncalibrated_models/
+!/sklearn_models/feature_selection_models/
 
 
 #These are to run on the remote server
