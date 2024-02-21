@@ -57,6 +57,7 @@ import json
 from sklearn.calibration import CalibratedClassifierCV
 import joblib
 from statistical_tests import *
+from collections import Counter
 
 
 all_models = {
@@ -225,8 +226,8 @@ def generate_metric_pictures():
         
         for fold in [f"Fold_{i}" for i in range(1, 6)]:
             est1 = joblib.load(f'./sklearn_models/calibrated_models/{model_name}_{fold}_calibrated.pkl')
-            feature_selection_method = est1.best_estimator_.steps[1][1]
-            reduce_dim_method = est1.best_estimator_.steps[2][1]
+            feature_selection_method = est1.base_estimator.best_estimator_.steps[1][1]
+            reduce_dim_method = est1.base_estimator.best_estimator_.steps[2][1]
         
             if feature_selection_method == reduce_dim_method: #Means both are passthrough, and no reduction in # of features occured
                 feature_selection_counter[model]["None"] += 1
@@ -261,7 +262,73 @@ def generate_metric_pictures():
 
     fig.savefig(f"./sklearn_models/figures/best_selection_methods.pdf", bbox_inches="tight")
     fig.savefig(f"./sklearn_models/figures/best_selection_methods.png", dpi=300, bbox_inches="tight")
+    
+    ############################################
+    #Plot the best features selected with the SFS method
+    
+    #Get the baseline data, we just need its feature names
+    _, _, _, concat_x, _ = get_formatted_Baseline_FUP(mode="Formatted")
+    
+    #For each model, get the name of the 10 best features for each fold.
+    best_features_dic = dict()
+
+    for model_name in all_models:
+        if (all_models[model_name] == "ML") and (model_name != "Dummy"):
             
+            model_results_dic = dict()
+
+            for fold in [f"Fold_{i}" for i in range(1, 6)]:
+                est1 = joblib.load(f'./sklearn_models/feature_selection_models/{model_name}_{fold}_NOT_calibrated_SFS.pkl')
+                f_select = est1.best_estimator_['feature_selection']
+                best_features = concat_x.columns[f_select.get_support()].to_list()
+                
+                model_results_dic[fold] = best_features
+            
+            best_features_dic[model_name] = model_results_dic
+            
+    #For each model, get the features that were chosen at least twice across the 5-fold CV.
+    best_overall_features_list = []
+
+    for model_name in all_models:
+        if (all_models[model_name] == "ML") and (model_name != "Dummy"):
+        
+            frequency_table = dict(Counter([val for fold in best_features_dic[model_name] for val in best_features_dic[model_name][fold]]))
+
+            majority_features = [val for val in frequency_table if frequency_table[val]>1]
+            
+            best_overall_features_list.append(majority_features)
+
+    #Unwrap the features
+    best_overall_features_list = [item for list_ in best_overall_features_list for item in list_]
+
+    #replace gender with sex
+    best_overall_features_list = ["Sex" if item == "Gender" else item for item in best_overall_features_list ]
+
+    #Get the frequncy of the best features across all the models
+    top_overall_features = Counter(best_overall_features_list)
+
+    #Sort the dic for a more beautiful figure
+    top_overall_features = dict(sorted(top_overall_features.items(), key=lambda item: item[1]))
+
+    #Only keep features with >2 votes
+    top_overall_features = {k:v for k, v in top_overall_features.items() if v>2}
+    
+    #Plot the results
+    fig, ax = plt.subplots(figsize = (6.5/1.2, 4.75/1.2))
+
+    plt.barh(list(top_overall_features.keys()), list(top_overall_features.values()), color="#3D65A5")
+
+    plt.xlabel("Feature Selection Frequency", fontsize=12)
+
+    plt.ylabel("Features", fontsize=12)
+    
+    
+    ax.xaxis.set_tick_params(labelsize=9, rotation=0)
+    ax.yaxis.set_tick_params(labelsize=9)
+
+    fig.savefig(f"./sklearn_models/figures/top_features.pdf", bbox_inches="tight")
+    fig.savefig(f"./sklearn_models/figures/top_features.png", dpi=300, bbox_inches="tight")
+    
 
 def perform_statistical_tests():
     """Perform pairwise Wilcoxon sign-rank test and show their results as a heatmap
@@ -345,11 +412,11 @@ def get_param_grid_model(classifier, joblib_memory_path = None):
             {"reduce_dim": [PCA(5), PCA(10)],
             "model__shrinkage":[None, 0.1, 0.5, 0.9, 'auto']},
             
-            {'feature_selection':[SequentialFeatureSelector(LinearDiscriminantAnalysis(), 
+            {'feature_selection':[SequentialFeatureSelector(LinearDiscriminantAnalysis(solver='lsqr'), 
                                                                 n_features_to_select=5, scoring=sfs_scoring, 
                                                                 cv=sfs_cv, direction='forward'),
                                   
-                                  SequentialFeatureSelector(LinearDiscriminantAnalysis(), 
+                                  SequentialFeatureSelector(LinearDiscriminantAnalysis(solver='lsqr'), 
                                                                 n_features_to_select=10, scoring=sfs_scoring, 
                                                                 cv=sfs_cv, direction='forward'),
                                   ],
@@ -358,7 +425,7 @@ def get_param_grid_model(classifier, joblib_memory_path = None):
                  
                      ]
         
-        model = LinearDiscriminantAnalysis()
+        model = LinearDiscriminantAnalysis(solver="lsqr")
         
         
     
@@ -524,7 +591,7 @@ def get_param_grid_model(classifier, joblib_memory_path = None):
             },
             
             {
-                'reduce_dim': [SequentialFeatureSelector(GradientBoostingClassifier(random_state=1), 
+                'feature_selection': [SequentialFeatureSelector(GradientBoostingClassifier(random_state=1), 
                                                                 n_features_to_select=5, scoring=sfs_scoring, 
                                                                 cv=sfs_cv, direction='forward'),
                                   
@@ -621,7 +688,7 @@ def create_5_fold_cv_patient_ids():
         json.dump(fold_id_dict, f, ensure_ascii=False, indent=4)
         
 
-def perform_nested_cv_with_calibration(model, X, y, joblib_memory_path = None):
+def perform_nested_cv_with_calibration(model, X, y, mode, joblib_memory_path = None):
     """Perform 5-fold nested CV by training and optimizing the ML models on the training-val fold, calibrating on the calibration fold, and then testing on the testing fold.
     Note: Requires '5_fold_cv_ids.json' file with patient ids for 5 fold cv.
 
@@ -629,6 +696,7 @@ def perform_nested_cv_with_calibration(model, X, y, joblib_memory_path = None):
         model (str): Name of the ML or clinical model.
         X (pd.DataFrame): Tabular dataframe of all the baseline dataset.
         y (pd.Series): Series of the targets for bleeders and non-bleeders.
+        mode (str): Whether to perform the cv 'experiment', or do 'feature_selection' only with SFS method.
         joblib_memory_path (str, optional): If ML grid search should be stored for efficiency. Defaults to None.
     """
     #Get the dictionary with the cross-validation ids
@@ -639,7 +707,12 @@ def perform_nested_cv_with_calibration(model, X, y, joblib_memory_path = None):
     #Stratification object for hyperparameter optimization
     inner_cv = StratifiedKFold(n_splits=3, shuffle=True, random_state=1)
 
-    print(f'Started performing nested cv for {model}')
+    if mode == "experiment":
+        print(f'Started performing nested cv for {model}')
+    elif mode == "feature_selection":
+        print(f'Started performing feature selection for {model}')
+    else:
+        raise(KeyError(f"{mode} is not valid. It should either be 'experiment' or 'feature_selection'."))
             
     for fold_num in fold_id_dict:
         
@@ -662,6 +735,11 @@ def perform_nested_cv_with_calibration(model, X, y, joblib_memory_path = None):
             #Get the parameter grid
             pipe, param_grid = get_param_grid_model(model, joblib_memory_path)
             
+            #Only keep the feature_selection with SFS when mode="feature_selection"
+            if mode == "feature_selection":
+                param_grid = [val for val in param_grid if 'SequentialFeatureSelector' in str(val)] #Getting rid of PCA, or other feature selection methods
+                param_grid[0]["feature_selection"] = [param_grid[0]["feature_selection"][1]] #Only keep the SFS with 10 number of features (2nd item in list)
+            
             clf = GridSearchCV(estimator=pipe, param_grid=param_grid, cv=inner_cv, scoring="roc_auc", n_jobs=-1, refit=True)
             #clf = RandomizedSearchCV(estimator=pipe, n_iter=10, param_distributions=param_grid, cv=inner_cv, scoring="roc_auc",n_jobs=-1, refit=True)
             
@@ -675,33 +753,36 @@ def perform_nested_cv_with_calibration(model, X, y, joblib_memory_path = None):
             #Fitting doesn't do anything special, it is just required for the class
             clf = clf.fit(x_training_val, y_training_val)
         
-    
-        #Calibrate the fitted model
-        x_calibration = baseline_dataframe_duplicate.loc[calibration_ids]
-        y_calibration = target_series_duplicate.loc[calibration_ids]
-        
-        calibrated_clf = CalibratedClassifierCV(clf, cv="prefit")
-        calibrated_clf.fit(x_calibration, y_calibration)
-        
-        
-        #Test the calibrated, fitted model
-        x_test = baseline_dataframe_duplicate.loc[test_ids]
-        y_test = target_series_duplicate.loc[test_ids]
-        #save the calibrated and uncalibrated models
-        joblib.dump(clf, f"./sklearn_models/uncalibrated_models/{model}_{fold_num}_NOT_calibrated.pkl")
-        joblib.dump(clf, f"./sklearn_models/calibrated_models/{model}_{fold_num}_calibrated.pkl")
-        #Test results
-        test_results = {
-            "uniqid": list(x_test.index),
-            "y_actual": list(y_test),
-            "y_pred_NOT_calibrated": list(clf.predict_proba(x_test)[:, 1]),
-            "y_pred_calibrated": list(calibrated_clf.predict_proba(x_test)[:, 1])
-        }
-        #Save the detailed test results
-        with open(f'./sklearn_models/test_results/{model}_{fold_num}_detailed_test_results.json', 'w', encoding='utf-8') as f: 
-            json.dump(test_results, f, ensure_ascii=False, indent=4, default=int)
-        
-        
+        if mode == "experiment":
+            #Calibrate the fitted model
+            x_calibration = baseline_dataframe_duplicate.loc[calibration_ids]
+            y_calibration = target_series_duplicate.loc[calibration_ids]
+            
+            calibrated_clf = CalibratedClassifierCV(clf, cv="prefit")
+            calibrated_clf.fit(x_calibration, y_calibration)
+            
+            
+            #Test the calibrated, fitted model
+            x_test = baseline_dataframe_duplicate.loc[test_ids]
+            y_test = target_series_duplicate.loc[test_ids]
+            #save the calibrated and uncalibrated models
+            joblib.dump(clf, f"./sklearn_models/uncalibrated_models/{model}_{fold_num}_NOT_calibrated.pkl")
+            joblib.dump(calibrated_clf, f"./sklearn_models/calibrated_models/{model}_{fold_num}_calibrated.pkl")
+            #Test results
+            test_results = {
+                "uniqid": list(x_test.index),
+                "y_actual": list(y_test),
+                "y_pred_NOT_calibrated": list(clf.predict_proba(x_test)[:, 1]),
+                "y_pred_calibrated": list(calibrated_clf.predict_proba(x_test)[:, 1])
+            }
+            #Save the detailed test results
+            with open(f'./sklearn_models/test_results/{model}_{fold_num}_detailed_test_results.json', 'w', encoding='utf-8') as f: 
+                json.dump(test_results, f, ensure_ascii=False, indent=4, default=int)
+            
+        elif mode == "feature_selection":
+            #save the models for feature selection later on
+            joblib.dump(clf, f"./sklearn_models/feature_selection_models/{model}_{fold_num}_NOT_calibrated_SFS.pkl")
+            
         print("\t", model, fold_num, "is done in", f'{time.time()-start_time}', "seconds.")    
 
 
@@ -803,28 +884,29 @@ def perform_nested_cv(model, X, y, joblib_memory_path = None):
 
 
 def main(mode, joblib_memory_path=None):
+    """Perform either the 5-fold nested cv experiment with calibration, or perform feature selection with SFS. 
+
+    Args:
+        mode (str): Whether to perform the cv 'experiment', or do 'feature_selection' only with SFS method.
+        joblib_memory_path (str, optional): Path for temp sklearn joblib to accelerate experiment. Defaults to None.
+    """
     
-    def nested_cv_(model_name):
+    def nested_cv_(model_name, mode):
         if all_models[model_name] == "Clinical":
             _, _, _, concat_x, target_series = get_formatted_Baseline_FUP(mode="Raw")
-            perform_nested_cv_with_calibration(model_name, concat_x, target_series, joblib_memory_path)
+            perform_nested_cv_with_calibration(model_name, concat_x, target_series, mode, joblib_memory_path)
         elif all_models[model_name] == "ML":
             _, _, _, concat_x, target_series = get_formatted_Baseline_FUP(mode="Formatted")
-            perform_nested_cv_with_calibration(model_name, concat_x, target_series, joblib_memory_path)
+            perform_nested_cv_with_calibration(model_name, concat_x, target_series, mode, joblib_memory_path)
     
-    
-    #Perform nested cv
-    if mode == "all_models":
+    if mode == "experiment":
         for model in all_models:
-            nested_cv_(model)
-    elif mode in all_models.keys():
-        nested_cv_(mode)
-    elif mode == "test":
-        _, _, _, concat_x, target_series = get_formatted_Baseline_FUP(mode="Formatted")
-
-        print("Data preparation was finished succesfully.")
-    else:
-        raise Exception(f"The mode {mode} doesn't exist.")
+            nested_cv_(model, mode)
+            
+    elif mode == "feature_selection":
+        for model in all_models:
+            if (all_models[model] == "ML") and (model!= "Dummy"):
+                nested_cv_(model, mode)
     
 
 def Brier_score(y_true, y_pred, nbins):
@@ -1450,27 +1532,30 @@ if __name__=="__main__":
     """
     - To perform supervised analysis:
         Option 1 (no Temp directory to save Scikit-learn models): 
-            python just_baseline_experiments.py experiment {all_models; MODEL_NAME}
+            python just_baseline_experiments.py {'experiment'; 'feature_selection'}
         Option 2 (with temp directory)
-            python just_baseline_experiments.py experiment {all_models; MODEL_NAME} TMP_directory
+            python just_baseline_experiments.py {'experiment'; 'feature_selection'} TMP_directory
     """
 
-    if (sys.argv[1] == "experiment"):
-        if (len(sys.argv) == 4):
-            print(f"The temp directory is set to: {sys.argv[3]}")
-            main(sys.argv[2], sys.argv[3])
-        else:
-            print("No temp directory will be used.")
-            main(sys.argv[2])
+    if sys.argv[1] in ["experiment", "feature_selection"]:
+        tmp_dir = sys.argv[2] if len(sys.argv) == 3 else None
+        main(mode=sys.argv[1], joblib_memory_path=tmp_dir)
+        
     elif sys.argv[1] == 'calc_grid_space':
         count_length_of_grid_search()
+        
     elif sys.argv[1] == 'generate_pictures_metrics':
         generate_metric_pictures()
+        
     elif sys.argv[1] == 'unsupervised':
         perform_unsupervised_learning()
+        
     elif sys.argv[1] == 'statistical_tests':
         create_CV_result_table()
         perform_statistical_tests()
+        
+    else:
+        raise Exception(f"The mode {sys.argv[1]} doesn't exist.")
 
 
 
