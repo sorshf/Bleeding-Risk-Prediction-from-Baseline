@@ -1524,7 +1524,10 @@ def create_CV_result_table():
             metric_mean = np.average(cv_results[model][metric])
             metric_std = np.std(cv_results[model][metric])
             
-            table.loc[model, metric] = f"{metric_mean:.2e} ({metric_std:.2e})"
+            if metric in ["AUROC", "AUPRC", "Slope", "Intercept"]:
+                table.loc[model, metric] = f"{metric_mean:.2f}\n({metric_std:.2f})"
+            else:
+                table.loc[model, metric] = f"{metric_mean:.2e}\n({metric_std:.2e})"
             
     table.to_excel("./sklearn_models/test_results/Summary_table.xlsx")
     
@@ -1552,7 +1555,7 @@ if __name__=="__main__":
         
     elif sys.argv[1] == 'statistical_tests':
         create_CV_result_table()
-        perform_statistical_tests()
+        #perform_statistical_tests()
         
     else:
         raise Exception(f"The mode {sys.argv[1]} doesn't exist.")
