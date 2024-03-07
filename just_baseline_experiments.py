@@ -3,34 +3,29 @@
 # =============================================================================
 # Created By  : Soroush Shahryari Fard
 # =============================================================================
-"""The module performs 5-fold nested CV on the Baseline dataset using ML and clinical models."""
+"""The module performs unsupervised, supervised analysis on the baseline dataset."""
 # =============================================================================
 # Imports
-from data_preparation import prepare_patient_dataset
-from constants import data_dir, instruction_dir, discrepency_dir
 from data_preparation import get_formatted_Baseline_FUP
 
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis, QuadraticDiscriminantAnalysis
-from sklearn.neural_network import MLPClassifier
 from sklearn.dummy import DummyClassifier
 from clinical_score import ClinicalScore
 from sklearn.pipeline import Pipeline
-from sklearn.naive_bayes import GaussianNB, ComplementNB
+from sklearn.naive_bayes import GaussianNB
 from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier, GradientBoostingClassifier, ExtraTreesClassifier
-from sklearn.svm import SVC, LinearSVC
+from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier, GradientBoostingClassifier
+from sklearn.svm import SVC
 from sklearn.linear_model import LogisticRegression, LinearRegression
-from sklearn.metrics import confusion_matrix, make_scorer, accuracy_score, precision_score, average_precision_score, roc_auc_score, recall_score, f1_score, brier_score_loss
+from sklearn.metrics import average_precision_score, roc_auc_score, brier_score_loss
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from sklearn.decomposition import PCA, KernelPCA
-from sklearn.model_selection import StratifiedKFold, GridSearchCV, RandomizedSearchCV, StratifiedKFold, cross_validate, RepeatedStratifiedKFold
-from sklearn.feature_selection import SelectFromModel, SequentialFeatureSelector
+from sklearn.model_selection import StratifiedKFold, GridSearchCV, StratifiedKFold
+from sklearn.feature_selection import SequentialFeatureSelector
 
 
 import pandas as pd
 import numpy as np
-import pickle 
 import time
 import sys
 import itertools
@@ -47,7 +42,6 @@ from matplotlib.lines import Line2D
 from scipy.cluster.hierarchy import dendrogram, linkage, fcluster
 from scipy.cluster import hierarchy
 
-import re
 from sksurv.nonparametric import kaplan_meier_estimator
 from sklearn.feature_selection import chi2
 from scipy.stats import ttest_ind
@@ -59,7 +53,7 @@ import joblib
 from statistical_tests import *
 from collections import Counter
 
-
+#List of all the models.
 all_models = {
     'CHAP':"Clinical",
     'ACCP':'Clinical',
@@ -79,6 +73,7 @@ all_models = {
     "Dummy": "ML"
 }
 
+#Names for publication
 nice_names = {
     'CHAP':"CHAP",
     'ACCP':"ACCP",
@@ -97,20 +92,6 @@ nice_names = {
     "GradientBoosting" : "Gradient\nBoosting",
     "Dummy":"Dummy",
 }
-
-
-def my_custom_metrics(y_true, y_pred, metric):
-    tn, fp, fn, tp = confusion_matrix(y_true, y_pred).ravel()
-    if metric == "tp":
-        return tp
-    if metric == "tn":
-        return tn
-    if metric == "fp":
-        return fp
-    if metric == "fn":
-        return fn
-    if metric == "specificity":
-        return tn/(tn+fp)
 
 def count_length_of_grid_search():
     """Prints the number of grid search space for the ML models.
@@ -132,6 +113,8 @@ def count_length_of_grid_search():
         
 
 def generate_metric_pictures():
+    """Plots the boxplot figures for all the metrics, best feature selection methods, and best features.
+    """
     #Set the size of the fonts
     plt.rcParams['xtick.labelsize'] = 10
     plt.rcParams['ytick.labelsize'] = 10
@@ -246,10 +229,6 @@ def generate_metric_pictures():
     
 
     feat_select_df = pd.DataFrame.from_dict(feature_selection_counter).T
-    # feat_select_df["model"] = feat_select_df.index
-    # feat_select_df = feat_select_df.melt(id_vars ="model", value_vars=["PCA", "SFS", "None"], var_name="method")
-
-    # sns.barplot(data=feat_select_df, x="model", y="value", hue="method", ax=ax, palette="icefire", width=0.6)
     feat_select_df.plot(kind="bar", stacked=True, ax=ax, color=["#d15e56", "#d13328",
                                                             "#ba64d1", "#b034d1",
                                                             "#B0A8B9"])
@@ -361,6 +340,15 @@ def perform_statistical_tests():
             
 
 def get_param_grid_model(classifier, joblib_memory_path = None):
+    """Returns the appropriate pipeline and grid search space for a model.
+
+    Args:
+        classifier (str): Name of the classifier for training.
+        joblib_memory_path (str, optional): Path to a temp joblib folder for accelerating training. Defaults to None.
+
+    Returns:
+        sklearn.Pipeline, list: The sklearn pipeline object, list of dicts of params for grid search.
+    """
     
     #Params for sequential feature selection
     sfs_scoring = "roc_auc"
@@ -784,130 +772,7 @@ def perform_nested_cv_with_calibration(model, X, y, mode, joblib_memory_path = N
             joblib.dump(clf, f"./sklearn_models/feature_selection_models/{model}_{fold_num}_NOT_calibrated_SFS.pkl")
             
         print("\t", model, fold_num, "is done in", f'{time.time()-start_time}', "seconds.")    
-
-
-def perform_nested_cv(model, X, y, joblib_memory_path = None):
-    
-    #Custom Scores
-    tn_score = make_scorer(my_custom_metrics, greater_is_better=True, metric="tn")
-    tp_score = make_scorer(my_custom_metrics, greater_is_better=True, metric="tp")
-    fn_score = make_scorer(my_custom_metrics, greater_is_better=True, metric="fn")
-    fp_score = make_scorer(my_custom_metrics, greater_is_better=True, metric="fp")
-    specificity_score = make_scorer(my_custom_metrics, greater_is_better=True, metric="specificity")
-
-    
-    #Copy the input X and the output y  
-    baseline_dataframe_duplicate = X.copy()
-    target_series_duplicate = y.copy()
-    
-    inner_cv = StratifiedKFold(n_splits=3, shuffle=True, random_state=1)
-    outer_cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=1)
-    
-    print(f'Started performing nested cv for {model}')
-    start_time = time.time()
-    
-    if all_models[model] == "ML":
-        
-        pipe, param_grid = get_param_grid_model(model, joblib_memory_path)
-
-
-
-        clf = GridSearchCV(estimator=pipe, param_grid=param_grid, cv=inner_cv, scoring="roc_auc", n_jobs=-1)
-        # clf = RandomizedSearchCV(estimator=pipe, n_iter=10, param_distributions=param_grid, cv=inner_cv, scoring="roc_auc")
-        nested_score = cross_validate(clf, X=baseline_dataframe_duplicate, n_jobs=-1,
-                                      return_estimator=True, y=target_series_duplicate, cv=outer_cv, 
-                                    scoring={"Accuracy":'accuracy',
-                                            "Sensitivity":'recall',
-                                            "AUPRC":'average_precision',
-                                            "AUROC":'roc_auc',
-                                            "Precision":make_scorer(precision_score,zero_division=0),
-                                            "F1-score":'f1',
-                                            "Specificity": specificity_score,
-                                            "TN":tn_score,
-                                            "TP":tp_score,
-                                            "FN":fn_score,
-                                            "FP":fp_score,
-                                            })
-        
-        with open(f"./sklearn_results/{model}_nested_cv_results.pickle", 'wb') as handle:
-            pickle.dump(nested_score, handle, protocol=pickle.HIGHEST_PROTOCOL)
-        
-
-    elif all_models[model] == "Clinical":
-        #Create the score object
-        clinical_model = ClinicalScore(model)
-
-        #Fitting doesn't do anything special, it is just required for the class
-        clinical_model = clinical_model.fit(baseline_dataframe_duplicate, target_series_duplicate)
-
-        #Add the uniqid as a column to the baseline data because the split will re-index the data
-        baseline_dataframe_duplicate["uniqid"] = baseline_dataframe_duplicate.index
-        
-        #cv_dictionary
-        cv_results_dic = dict()
-        
-        #For each test index set, compute the metrics
-        for i, (train_index, test_index) in enumerate(outer_cv.split(baseline_dataframe_duplicate,
-                                                                     target_series_duplicate)):
-            
-            X_test_uniqids = list(baseline_dataframe_duplicate.iloc[test_index]['uniqid'])
-            X_test_data = baseline_dataframe_duplicate.loc[X_test_uniqids]
-            y_test = target_series_duplicate.loc[X_test_uniqids]
-
-            #Record exactly what are the predictions for each sample on the test dataset
-            y_pred_classes = clinical_model.predict(X_test_data) #This is the class that the model predicts
-            y_pred_proba = clinical_model.predict(X_test_data, mode="score") #This is the score (similar to probability) of the model
-            
-            tn, fp, fn, tp = confusion_matrix(y_test, y_pred_classes).ravel()
-            specificity = tn/(tn+fp)
-
-            record_dict = {"Accuracy":accuracy_score(y_test, y_pred_classes),
-                           "Precision":precision_score(y_test, y_pred_classes, zero_division=0),
-                           "Sensitivity":recall_score(y_test, y_pred_classes),
-                           "AUROC":roc_auc_score(y_test, y_pred_proba), #The probability is used instead of the threshold-decided class
-                           "AUPRC":average_precision_score(y_test, y_pred_proba), #The probability is used instead of the threshold-decided class
-                           "F1-score": f1_score(y_test, y_pred_classes),
-                           "Specificity": specificity,
-                           "TN":tn,
-                            "TP":tp,
-                            "FN":fn,
-                            "FP":fp
-                           }
-            
-            cv_results_dic[f"test_split_{i}"] = record_dict
-
-        #Save the detailed results
-        pd.DataFrame(cv_results_dic).T.to_csv(f"./sklearn_results/{model}_nested_cv_results.csv")
-
-
-    print(model, "is done in", f'{time.time()-start_time}', "seconds.")
-
-
-def main(mode, joblib_memory_path=None):
-    """Perform either the 5-fold nested cv experiment with calibration, or perform feature selection with SFS. 
-
-    Args:
-        mode (str): Whether to perform the cv 'experiment', or do 'feature_selection' only with SFS method.
-        joblib_memory_path (str, optional): Path for temp sklearn joblib to accelerate experiment. Defaults to None.
-    """
-    
-    def nested_cv_(model_name, mode):
-        if all_models[model_name] == "Clinical":
-            _, _, _, concat_x, target_series = get_formatted_Baseline_FUP(mode="Raw")
-            perform_nested_cv_with_calibration(model_name, concat_x, target_series, mode, joblib_memory_path)
-        elif all_models[model_name] == "ML":
-            _, _, _, concat_x, target_series = get_formatted_Baseline_FUP(mode="Formatted")
-            perform_nested_cv_with_calibration(model_name, concat_x, target_series, mode, joblib_memory_path)
-    
-    if mode == "experiment":
-        for model in all_models:
-            nested_cv_(model, mode)
-            
-    elif mode == "feature_selection":
-        for model in all_models:
-            if (all_models[model] == "ML") and (model!= "Dummy"):
-                nested_cv_(model, mode)
-    
+   
 
 def Brier_score(y_true, y_pred, nbins):
     """Calculate Brier Score and its decomposition (uncertainty, resolution, reliability, Brier_score, Brier_skill_score).
@@ -973,6 +838,8 @@ def Brier_score(y_true, y_pred, nbins):
     
     
 def perform_unsupervised_learning():
+    """Perform pearson's correlation, dimentionality reduction, clusterting, bleeders agglomerative clustering, long-rank test.
+    """
     
     #Get the Baseline dataset formatted
     patient_dataset, _, _, concat_x, target_series = get_formatted_Baseline_FUP(mode="Formatted")
@@ -1275,31 +1142,6 @@ def perform_unsupervised_learning():
     chisq, p_val, stats, covar_mat =  compare_survival(y=arr_content  ,group_indicator=only_bleeders_X["cluster"], return_stats=True)
     print(f"\nThe log-rank p-value is {p_val}\n")
     print(stats, "\n")
-    #################
-    #Perform one Cluster vs rest to find the discriminaotory features
-    # fig, axs = plt.subplots(1, 3, figsize=(15, 3.5), constrained_layout=True)
-
-    # for ax, cluster_num, color in zip(axs.flat, set(clusters), bleeders_cluster_color_pallette):
-
-    #     x_cluster = only_bleeders_X.copy()
-    #     x_cluster = x_cluster.drop(["cluster","time_to_bleed_months"], axis=1)
-    #     x_cluster = pd.DataFrame(StandardScaler().fit_transform(x_cluster), columns=x_cluster.columns)
-    #     y_cluster = only_bleeders_X["cluster"].copy()
-    #     y_cluster = [1 if val == cluster_num else 0 for val in y_cluster]
-        
-        
-    #     reg = LassoCV(cv=3, random_state=0, max_iter=5000).fit(x_cluster, y_cluster)
-
-    #     coef_df = pd.DataFrame({"Feature Name":reg.feature_names_in_, "coef":reg.coef_})
-    #     coef_df = coef_df[np.abs(coef_df["coef"]) > 0]
-    #     coef_df = coef_df.sort_values(by="coef", ascending=True)
-    #     coef_df = pd.concat([coef_df[0:5],coef_df[-5:] ])
-    #     ax.barh(coef_df["Feature Name"], coef_df["coef"], color=color)
-    #     ax.set_title(f"Cluster {cluster_num}")
-    #     ax.set_xlabel("Coefficient")
-        
-    # fig.savefig(f"./sklearn_results/Figures/LasssoCV_results.pdf",  bbox_inches='tight')  
-    # fig.savefig(f"./sklearn_results/Figures/LasssoCV_results.png", dpi=500,  bbox_inches='tight')  
     ###################
     #Lasso on the two clusters
     fig, ax = plt.subplots(figsize=(7, 4), constrained_layout=True)
@@ -1513,8 +1355,10 @@ def get_CV_results_from_json(saving_path):
         
     return all_model_metrics
 
+
 def create_CV_result_table():
-    
+    """Create the summary table of the metrics from the json results.
+    """
     cv_results = get_CV_results_from_json("./sklearn_models/test_results/")
 
     table = pd.DataFrame(columns=cv_results["CHAP"].keys() , index=cv_results.keys())
@@ -1530,7 +1374,34 @@ def create_CV_result_table():
                 table.loc[model, metric] = f"{metric_mean:.2e}\n({metric_std:.2e})"
             
     table.to_excel("./sklearn_models/test_results/Summary_table.xlsx")
+
+
+def main(mode, joblib_memory_path=None):
+    """Perform either the 5-fold nested cv experiment with calibration, or perform feature selection with SFS. 
+
+    Args:
+        mode (str): Whether to perform the cv 'experiment', or do 'feature_selection' only with SFS method.
+        joblib_memory_path (str, optional): Path for temp sklearn joblib to accelerate experiment. Defaults to None.
+    """
     
+    def nested_cv_(model_name, mode):
+        if all_models[model_name] == "Clinical":
+            _, _, _, concat_x, target_series = get_formatted_Baseline_FUP(mode="Raw")
+            perform_nested_cv_with_calibration(model_name, concat_x, target_series, mode, joblib_memory_path)
+        elif all_models[model_name] == "ML":
+            _, _, _, concat_x, target_series = get_formatted_Baseline_FUP(mode="Formatted")
+            perform_nested_cv_with_calibration(model_name, concat_x, target_series, mode, joblib_memory_path)
+    
+    if mode == "experiment":
+        for model in all_models:
+            nested_cv_(model, mode)
+            
+    elif mode == "feature_selection":
+        for model in all_models:
+            if (all_models[model] == "ML") and (model!= "Dummy"):
+                nested_cv_(model, mode)
+                
+                    
 if __name__=="__main__":
     """
     - To perform supervised analysis:
@@ -1555,7 +1426,7 @@ if __name__=="__main__":
         
     elif sys.argv[1] == 'statistical_tests':
         create_CV_result_table()
-        #perform_statistical_tests()
+        perform_statistical_tests()
         
     else:
         raise Exception(f"The mode {sys.argv[1]} doesn't exist.")

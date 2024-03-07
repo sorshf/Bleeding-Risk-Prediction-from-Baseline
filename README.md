@@ -1,9 +1,9 @@
 
 
-# Application of Machine Learning in Predicting Bleeding in the Extended Phase of Treatment in Patients with Venous Thromboembolism
+# Supervised and Unsupervised Machine Learning Analysis of Bleeding Status in Venous Thromboembolism Patients
 
 ## Description
-The performance of the clinical models used to predict bleeding in patients on anticoagulants with Venous Thromboembolism have stayed at around 70% as measured with area under ROC curve. In this paper, we explored the baseline information of 2542 patients using unsupervised dimentionality reduction and clustering algorithms and demonstrated high degree of similarity between their baseline dataset. Furthermore, we observed no benefits in using supervised machine learning algorithms to predict bleeding risk compared to the  conventional clinical models.
+The performance of the clinical models used to predict bleeding in patients on anticoagulants with Venous Thromboembolism have stayed at around 70% as measured with area under ROC curve. In this paper, we explored the baseline information of 2542 patients using unsupervised dimentionality reduction and clustering algorithms and demonstrated high degree of similarity between their baseline dataset. Furthermore, we observed no benefits in using supervised machine learning algorithms to predict bleeding risk compared to the conventional clinical models.
 
 To perform the 5-fold nested cross-validation for all the models:
 ```

@@ -10,13 +10,6 @@ data_dir = "./Raw Data/data transferred Soroush with pwd.xlsx"
 instruction_dir = "./Raw Data/column_preprocessing_excel test_Mar13_2022.xlsx"
 discrepency_dir = "./Chantal_bleeding_revisions/2022-10-03  discrepencies_bleeding_data_Updated.xlsx"
 
-
-timeseries_padding_value = -5.
-
-picled_objects = "./pickle_objects/"
-
-all_data_pics_path = "./all_data_pics/"
-
 #Directory to save the excel or csv files containing generated tables and stats 
 stats_directory = "./Stats/"
 
@@ -56,6 +49,3 @@ ALPHA_dic = {
     "fups_disc":0.9,
     "baseline":0.6
 }
-
-#Number of Iterations for hyperparameter tuning and cv
-NUMBER_OF_ITERATIONS_CV = 5
